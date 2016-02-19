@@ -6,15 +6,12 @@ let
 
   f = { mkDerivation, base, stdenv }:
       mkDerivation {
-        pname = "haskell-math";
+        pname = "haskell-fun";
         version = "0.1.0.0";
         src = ./.;
-        isLibrary = true;
-        isExecutable = true;
         libraryHaskellDepends = [ base ];
-        executableHaskellDepends = [ base ];
         testHaskellDepends = [ base ];
-        homepage = "http://github.com/sleexyz/haskell-math#readme";
+        homepage = "http://github.com/sleexyz/haskell-fun#readme";
         description = "Initial project template from stack";
         license = stdenv.lib.licenses.bsd3;
       };
