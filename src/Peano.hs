@@ -13,31 +13,46 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 
+ {-|
+ # Peano numbers!
+
+ (
+   ...Heavily inspired from PeanoWitnesses and others
+   https://hackage.haskell.org/package/PeanoWitnesses-0.1.0.0/docs/src/Data-Numeric-Witness-Peano.html
+   http://stackoverflow.com/questions/19800664/is-it-possible-to-write-a-function-int-natsing-n-where-natsing-is-a-singleto
+
+ Here we explore a slew of language extensions:
+ DataKinds, Generalized Algebraic Datatypes, Type families, and ConstraintKinds!
+ |-}
+
 module Peano
        where
 
 
- -- Heavily inspired from PeanoWitnesses and others
- -- https://hackage.haskell.org/package/PeanoWitnesses-0.1.0.0/docs/src/Data-Numeric-Witness-Peano.html
- -- http://stackoverflow.com/questions/19800664/is-it-possible-to-write-a-function-int-natsing-n-where-natsing-is-a-singleto
--- Here we explore a slew of language extensions:
--- DataKinds, Generalized Algebraic Datatypes, Type families, and ConstraintKinds!
---
-
--- ## STEP 1: Peano number datatype
--- First we denote a kind Nat that includes our Peano numbers.
--- We do this via promoting a datatype into a datakind via the DataKinds extension
 
 
 
--- What does DataKinds give us?
--- DataKinds promotes our datatype from the type level to the kind level
--- and promotes its constructors from the term level to the type level
+
+
+{-|
+
+## STEP 1: Peano number datatype
+First we denote a kind Nat that includes our Peano numbers.
+We do this via promoting a datatype into a datakind via the DataKinds extension
+
+|-}
+
+
+{-|
+What does DataKinds give us?
+DataKinds promotes our datatype from the type level to the kind level
+and promotes its constructors from the term level to the type level
+|-}
 
 
 data Nat :: *     -- Nat is a type in this case, but DataKinds promotes Nat from a type to a kind itself
   where
-    Zero :: Nat 
+    Zero :: Nat
     Succ :: Nat -> Nat
 deriving instance Show Nat -- standalone deriving syntax
 
