@@ -9,6 +9,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 
@@ -23,7 +24,7 @@ module Peano
 -- DataKinds, Generalized Algebraic Datatypes, Type families, and ConstraintKinds!
 --
 
--- ## STEP 1: Peano numbers
+-- ## STEP 1: Peano number datatype
 -- First we denote a kind Nat that includes our Peano numbers.
 -- We do this via promoting a datatype into a datakind via the DataKinds extension
 
@@ -40,8 +41,11 @@ data Nat :: *     -- Nat is a type in this case, but DataKinds promotes Nat from
     Succ :: Nat -> Nat
 deriving instance Show Nat -- standalone deriving syntax
 
-data Nat' = Zero' | Succ' Nat' -- This is equivalent Haskell98 syntax. IMO, unclear, too sugary.
-          deriving (Show)
+
+
+ -- This is equivalent Haskell98 syntax. IMO, unclear, too sugary.
+-- data Nat' = Zero' | Succ' Nat'
+--           deriving (Show)
 
 -- So here,
 -- Nat exists both as kind and a type (:: *)
@@ -54,17 +58,18 @@ data Nat' = Zero' | Succ' Nat' -- This is equivalent Haskell98 syntax. IMO, uncl
 
 
 
--- Step
--- Now we 
+-- ## STEP 2: Create Singleton Types : Monotypic reification
+-- So now we have a Nat kind, along with Zero and Succ types
+-- But currently they are inaccessible; we haven't defined any reified form
+-- So we do exactly that, via a GADT that takes a type of kind Nat as a type parameter
+-- These singleton instances are terms that "hang" from the type level
 
 
+-- But what's a GADT?
 -- What's so Generalized about Generalized Algebraic Datatypes?
--- We can have constructors with richer return types!
--- (from
---       https://downloads.haskell.org/~ghc/latest/docs/html/users_guide/data-type-extensions.html#gadt
--- )
+-- Answer: We can have constructors with richer return types!
 
--- Pattern matching on GADT's causes type refinement!
+-- Pattern matching on GADT's causes type refinement.
 -- So we can define constructors with a different kind
 --
 -- ie.
@@ -84,16 +89,23 @@ deriving instance Show (NatSing n)
 
 -- Notice that NatSing is unpromotable, as its a higher-kinded data constructor (with a promoted type!)
 -- I.e. NatSing :: Nat -> *
--- Nat was promotable because Nat :: *
+-- So NatSing exists monouniversally at the type level
 --
--- So ZeroSing exists monouniversally at the term level as a data constructor
+-- And ZeroSing exists monouniversally at the term level as a data constructor
 -- And SuccSing exists monouniversally at the term level as a data constructor
 
--- reify terms from the aether
 
-class ReifyNat n                             where reifyNat :: NatSing n
-instance ReifyNat 'Zero                      where reifyNat = ZeroSing
-instance (ReifyNat n) => ReifyNat ('Succ n)  where reifyNat = SuccSing (reifyNat :: NatSing n)
+-- ## STEP 3: Polytypic reification
+-- Right now we have monotypic singleton terms that hang from Nat types from a thread.
+-- We can create a polytypic term, that given a type, will return the appropriate term.
+-- In essence, we create the equivalent of a *dependent* function;
+-- Given a type, we return an appropriate term.
+-- Given a Natural number at the type level, we return a natural number at the term level.
+
+
+class ReifiableNat (n :: Nat)                            where reifyNat :: NatSing n
+instance ReifiableNat 'Zero                      where reifyNat = ZeroSing
+instance (ReifiableNat n) => ReifiableNat ('Succ n)  where reifyNat = SuccSing (reifyNat :: NatSing n)
 
 type family x + y where
   x + 'Zero = x
