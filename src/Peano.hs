@@ -90,7 +90,7 @@ DataKinds is an example of an /inter-universal/ construct in Haskell. (Or /unive
 ==== Single-kinded datatypes become single-sorted datakinds
 
 * A datatype gets promoted to a datakind
-  * ie @Nat :: *@ becomes @Nat :: '*@, where @'*@ is psuedo-haskell for Kind, ie. the sort of all kinds, ie. the type of all types of all types, which must exist at a universe level higher than kinds.
+  * ie @Nat :: *@ becomes @Nat :: '*@, where @'*@ is psuedo-haskell for Kind, ie. the "sort" of all kinds, ie. the type of all types of all types, which must exist at a universe level higher than kinds.
 * A term of a datatype gets promoted to type of datakind
 
 ==== Higher-kinded datatypes become higher-sorted datakinds
@@ -103,58 +103,87 @@ DataKinds is an example of an /inter-universal/ construct in Haskell. (Or /unive
 
 {- $step2
 == STEP 2: Create singleton types for proxied monotypic reification
-So now we have a Nat kind, along with Zero and Succ types.
+So now we have a Nat kind, along with 'Zero and 'Succ types.
 
-But currently they are inaccessible; Zero and Succ are empty types, in the sense that they contain no elements. I might be wrong here, but they are empty by necessity, since we created them out of thin air (ie. from the kind-level downwards, instead of from terms upwards).
+But currently they are inaccessible; 'Zero and 'Succ are empty types, in the sense that they contain no elements. I might be wrong here, but they are empty by necessity, since we created them out of thin air (ie. from the kind-level downwards, instead of from terms upwards).
 
 How do we reify (to the term level) these empty types? For all I know, we can't, because we created them from thin air.
 
-We can't reify @'Zero :: Nat@ or @'Succ 'Zero :: 'Nat@, but we can reify
+We can't reify @'Zero :: Nat@ or @'Succ 'Zero :: Nat@. However, we can reify a higher-kinded "proxy" type that is /parametrized/ on Nat. We call it a proxy type, because we aren't reifying to terms a reified @Nat@, i.e. reifying @'Zero@, but actually reifying to terms a reified @Nat -> *@, ie. reifying @'NatSing 'Zero@
 
-So we do exactly that, via a GADT that takes a type of kind Nat as a type parameter
-These singleton instances are terms that "hang" from the type level
+We also call these proxy types "singleton" types, because they have a single inhabitant, as defined by our data constructors.
 -}
 
 
-data NatSing (n :: Nat) :: *
+data                       NatSing (n :: Nat)              :: *
   where
     ZeroSing            :: (NatSing 'Zero                  :: *)
     SuccSing            :: NatSing n -> NatSing ('Succ n)  -- TODO: put a kind on this!
 deriving instance Show (NatSing n)
 
--- Notice that NatSing is unpromotable, as its a higher-kinded data constructor (with a promoted type!)
--- I.e. NatSing :: Nat -> *
--- So NatSing exists monouniversally at the type level
---
--- And ZeroSing exists monouniversally at the term level as a data constructor
--- And SuccSing exists monouniversally at the term level as a data constructor
+{- $notice
+=== What's so GADTy about GADTs?
+Generalized Algebraic types are generalized because they allow constructor terms with differently kinded types.
+
+@
+             NatSing                         :: Nat -> *
+ZeroSing :: (NatSing 'Zero                   :: *)
+SuccSing :: (NatSing n -> NatSing ('Succ n)  :: Nat -> *)
+@
+Notice how we were allowed to refine types from kind @Nat -> *@ to kind @*@ in the case of ZeroSing.
+
+=== Is NatSing promotable?
+Notice that NatSing is unpromotable, as it's a higher-kinded data constructor. Also, it is parametrized with a promoted type! So if NatSing was to be promoted to the kind level, then Nat would have to be promoted to the Sort level (one level above Kind). As of GHC 7.10, datakinds only promote to one level higher.
+
+i.e. @NatSing :: Nat -> *@
+
+* So NatSing exists at the type level as a higher kinded type
+* And ZeroSing exists at the term level as a nullary function term
+* And SuccSing exists at the term level as a polytypic unary function term
+-}
 
 
--- ## STEP 3: Polytypic reification
--- Right now we have monotypic singleton terms that hang from Nat types from a thread.
--- We can create a polytypic term, that given a type, will return the appropriate term.
--- In essence, we create the equivalent of a *dependent* function;
--- Given a type, we return an appropriate term.
--- Given a Natural number at the type level, we return a natural number at the term level.
+{- $step3
 
+== STEP 3: Polytypic reification
+Right now we have monotypic singleton terms that are serve as proxied reified @Nat@s.
+One cool thing we can do is create a polytypic term, that given a type (monomorphised), will return the appropriate monotypic term.
+
+
+-}
 
 class ReifiableNat (n :: Nat)                            where reifyNat :: NatSing n
 instance ReifiableNat 'Zero                      where reifyNat = ZeroSing
 instance (ReifiableNat n) => ReifiableNat ('Succ n)  where reifyNat = SuccSing (reifyNat :: NatSing n)
 
-type family x + y where
+{- $step3cont
+
+With a typeclass, we can create a polytypic function over our Nat types. We define that polytypic function as @reifyNat@, which is implemented for all @ReifiableNat@s.
+
+* We make @'Zero@ a ReifiableNat, by implementing reifyNat, by returning @ZeroSing@, the proxied singleton term.
+* We make @'Succ n@ a ReifiableNat given than @n@ is a ReifiableNat, by implementing @reifyNat@, by returning @SuccSing@ of @reifyNat@ of type @NatSing n@
+
+
+What's the big deal? In essence, we've created the equivalent of a /dependent/ function:
+
+* Given a type, we return a monotypic term.
+* Given a natural number at the type level, we return a natural number at the term level.
+
+-}
+
+type family x + y :: Nat where
   x + 'Zero = x
   x + 'Succ y = 'Succ (x + y)
 
-type family x - y where
+type family x - y :: Nat where
   x - 'Zero = x
   'Succ x - 'Succ y = x - y
 
 
-type One = 'Succ 'Zero
-type Two = 'Succ One
-type Three = 'Succ Two
-type Four = 'Succ Three
+type One =   ('Succ 'Zero  :: Nat)
+type Two =   ('Succ One    :: Nat)
+type Three = ('Succ Two    :: Nat)
+type Four =  ('Succ Three  :: Nat)
 
 -- |ideal:
 -- (n ::Int) -> Nat
