@@ -167,9 +167,13 @@ With a typeclass, we can create a polytypic function over our Nat types. We defi
 What's the big deal? In essence, we've created the equivalent of a /dependent/ function:
 
 * Given a type, we return a monotypic term.
-* Given a natural number at the type level, we return a natural number at the term level.
+* In other words, given a natural number at the type level, we return a natural number at the term level.
 
 -}
+
+{- $todo
+TODO: add constraint kinds
+}
 
 type family x + y :: Nat where
   x + 'Zero = x
@@ -184,9 +188,6 @@ type One =   ('Succ 'Zero  :: Nat)
 type Two =   ('Succ One    :: Nat)
 type Three = ('Succ Two    :: Nat)
 type Four =  ('Succ Three  :: Nat)
-
--- |ideal:
--- (n ::Int) -> Nat
 
 {- $references
 == References
