@@ -173,7 +173,7 @@ What's the big deal? In essence, we've created the equivalent of a /dependent/ f
 
 {- $todo
 TODO: add constraint kinds
-}
+-}
 
 type family x + y :: Nat where
   x + 'Zero = x
