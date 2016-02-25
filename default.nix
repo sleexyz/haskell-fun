@@ -4,12 +4,12 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, stdenv }:
+  f = { mkDerivation, base, containers, stdenv }:
       mkDerivation {
         pname = "haskell-fun";
         version = "0.1.0.0";
         src = ./.;
-        libraryHaskellDepends = [ base ];
+        libraryHaskellDepends = [ base containers ];
         testHaskellDepends = [ base ];
         homepage = "http://github.com/sleexyz/haskell-fun#readme";
         description = "Initial project template from stack";

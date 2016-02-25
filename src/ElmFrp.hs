@@ -4,6 +4,8 @@
 module ElmFrp where
 
 
+-- Really just integration over time
+
 
 type Signal a = [a]
 
