@@ -19,6 +19,8 @@ library
                      , Peano
                      , Interuniversal
                      , CartesianClosed
+                     , ElmFrp
+                     , PureHandlers
   build-depends:       base >= 4.7 && < 5
   default-language:    Haskell2010
 
