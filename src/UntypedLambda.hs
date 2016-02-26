@@ -4,6 +4,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE BangPatterns #-}
 
 module UntypedLambda where
 
@@ -30,23 +31,23 @@ type Name = String
 
 data Value =
     VVar Name
-  | VLambda Name (Value )
-  | VPrim Name (Value )
+  | VLambda Name Value
+  | VPrim Name Value
   | VConst PrimVal
-  | VApply (Value ) (Value )
+  | VApply Value  Value
   | VFree Name
 
 
-deriving instance Show (Value )
+deriving instance Show Value
 
 
 
 data VContext = VContext (Map.Map Name Value) (Set.Set Name)
 
-lookupVContext :: VContext -> Name -> Maybe (Value )
+lookupVContext :: VContext -> Name -> Maybe Value
 lookupVContext (VContext contextMap _) name = Map.lookup name contextMap
 
-bindInVContext :: VContext -> Name -> Value  -> VContext
+bindInVContext :: VContext -> Name -> Value -> VContext
 bindInVContext (VContext contextMap undefinedSet) name expr  = VContext newContextMap newUndefinedSet
   where
     newContextMap = Map.insert name expr contextMap
@@ -72,8 +73,8 @@ eval input ctx = case input of
   VLambda name expr ->  VLambda name expr
   VConst prim ->  VConst prim
   VPrim str expr ->  VPrim str expr
-  VFree name ->  VFree name
-  VApply f x ->  evalVApply f x
+  -- VFree name ->  VFree name
+  VApply f x -> evalVApply f x
 
   where
     evalVVar name = f $ lookupVContext ctx name
@@ -82,26 +83,28 @@ eval input ctx = case input of
         -- f Nothing     = error $ "Error! " ++ name ++ " not found!"
         f Nothing     = VFree name
 
-    evalVApply leftExpr rightExpr = eval' (eval leftExpr ctx) (eval rightExpr ctx)
+    evalVApply !leftExpr !rightExpr = eval' (eval leftExpr ctx) (eval rightExpr ctx)
       where
         eval' (VLambda name expr) right = eval (traceShowId expr) $ bindInVContext ctx name right
-        eval' left right = VApply left right
-
+        eval' left right = error "uhoh"
 
 
 -- testExpr = VApply (VLambda "x" (VVar "x")) (VVar "y")
 testExpr = VApply (VLambda "x" (VVar "x")) (VVar "2")
 
-idcomb = VLambda "x" (VVar "x")
-coolcomb = VLambda "x" (VLambda "y" (VVar"x"))
+icomb = VLambda "x" (VVar "x")
+kcomb = VLambda "x" (VLambda "y" (VVar "x"))
+scomb = VLambda "x" (VLambda "y" (VLambda "z" (VApply (VApply (VVar "x") (VVar "z")) (VApply (VVar"x") (VVar "y")))))
 
-omega = VApply y y
+omega = VApply om om
   where
-    y = VLambda "x" (VApply (VVar "x") (VVar "x"))
+    om = VLambda "x" (VApply (VVar "x") (VVar "x"))
 
 ycomb = VLambda "y" (VApply y y)
   where
     y = VLambda "x" (VApply (VVar "y") (VApply (VVar "x") (VVar "x")))
+
+kiomega = VApply kcomb (VApply icomb omega)
 
 test :: Value -> Value
 test input = eval input defaultContext
