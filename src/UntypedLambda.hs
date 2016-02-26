@@ -1,76 +1,107 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 
-module UntypedLambda () where
+module UntypedLambda where
 
 import qualified Data.Map.Lazy as Map
+import qualified Data.Set as Set
+import Debug.Trace
+
+-- |> Todo: move to Kinds
+-- data Type where
+--   TInt :: Type
+--   TFunc :: Type -> Type -> Type
+
+ -- data Value t where
+ --   VVar   :: Name -> Value t
+ --   VLambda :: Name -> Value t -> Value t
+ --   VPrim:: Name -> Value t -> Value t
+ --   VConst :: PrimVal -> Value t
+ --   VFree :: Name -> Value t
+
+data PrimVal = PrimInt Int
+             deriving (Show, Eq, Ord)
+
+type Name = String
+
+data Value =
+    VVar Name
+  | VLambda Name (Value )
+  | VPrim Name (Value )
+  | VConst PrimVal
+  | VApply (Value ) (Value )
+  | VFree Name
 
 
-type Context = Map.Map String Expr
-
-data Expr = Var String
-          | Lambda String Expr
-          | Const Int
-          | Error String
-          | Add Expr Expr
-          | Eval Expr Expr
-            deriving (Show)
+deriving instance Show (Value )
 
 
 
+data VContext = VContext (Map.Map Name Value) (Set.Set Name)
 
-defaultContext :: Map.Map String Expr
-defaultContext =
-    Map.insert "1" (Const 1)
-  $ Map.insert "2" (Const 2)
-  $ Map.insert "undefined" (Error "Not found!")
-  $ Map.empty
+lookupVContext :: VContext -> Name -> Maybe (Value )
+lookupVContext (VContext contextMap _) name = Map.lookup name contextMap
 
-
-
-
-sorry :: forall a. a
-sorry = error "didn't work yo"
-
-
-
-
-eval :: Expr -> Context -> Expr
-
-eval (Add x y) ctx =  add (eval x ctx) (eval y ctx)
+bindInVContext :: VContext -> Name -> Value  -> VContext
+bindInVContext (VContext contextMap undefinedSet) name expr  = VContext newContextMap newUndefinedSet
   where
-    add (Const x) (Const y) = Const $ x + y
-    add _ _ = sorry
+    newContextMap = Map.insert name expr contextMap
+    newUndefinedSet = Set.delete name undefinedSet
+
+defaultContext :: VContext
+defaultContext = VContext (Map.fromList
+                           [ ("1", (VConst (PrimInt 1)))
+                           , ("2", (VConst (PrimInt 2)))
+                           , ("3", (VConst (PrimInt 3)))
+                           ]) (Set.fromList [])
 
 
-eval (Const x) ctx =  Const x
-eval (Lambda tag expr) ctx =  Lambda tag expr
+-- sorry :: forall a. a
+-- sorry = error "didn't work yo"
 
-eval (Error str) ctx = sorry
 
-eval (Var tag) ctx =  f $ Map.lookup tag ctx
-    where
-      f (Just x) = x
-      f Nothing = Error "Not found!"
 
-eval (Eval left right) ctx = eval' (eval left ctx) (eval right ctx)
+
+eval :: Value -> VContext -> Value
+eval input ctx = case input of
+  VVar name -> evalVVar name
+  VLambda name expr ->  VLambda name expr
+  VConst prim ->  VConst prim
+  VPrim str expr ->  VPrim str expr
+  VFree name ->  VFree name
+  VApply f x ->  evalVApply f x
+
   where
-    eval' (Lambda tag f) expr = eval f $ Map.insert tag expr ctx
-    eval' _ _ = sorry
+    evalVVar name = f $ lookupVContext ctx name
+      where
+        f (Just expr) = expr
+        -- f Nothing     = error $ "Error! " ++ name ++ " not found!"
+        f Nothing     = VFree name
+
+    evalVApply leftExpr rightExpr = eval' (eval leftExpr ctx) (eval rightExpr ctx)
+      where
+        eval' (VLambda name expr) right = eval (traceShowId expr) $ bindInVContext ctx name right
+        eval' left right = VApply left right
 
 
 
-expr0 = Add (Const 2) (Const 2)
-expr1 = Add (Add (Var "2") (Var "2")) (Var "2")
-expr2= Eval (Lambda "x" (Add (Var "x") (Const 2))) (Const 3)
+-- testExpr = VApply (VLambda "x" (VVar "x")) (VVar "y")
+testExpr = VApply (VLambda "x" (VVar "x")) (VVar "2")
 
-omega = Eval y y
+idcomb = VLambda "x" (VVar "x")
+coolcomb = VLambda "x" (VLambda "y" (VVar"x"))
+
+omega = VApply y y
   where
-    y = Lambda "x" (Eval (Var "x") (Var "x"))
+    y = VLambda "x" (VApply (VVar "x") (VVar "x"))
 
-ycomb = Lambda "y" (Eval y y)
-   where
-     y = Lambda "x" (Eval (Var "y") (Eval (Var "x") (Var "x")))
+ycomb = VLambda "y" (VApply y y)
+  where
+    y = VLambda "x" (VApply (VVar "y") (VApply (VVar "x") (VVar "x")))
 
-test :: Expr -> Expr
+test :: Value -> Value
 test input = eval input defaultContext
