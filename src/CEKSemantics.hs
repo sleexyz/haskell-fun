@@ -31,11 +31,11 @@ type State = (Expr, Env, Kont)
 
 instance {-# OVERLAPPING #-} Show State where
   show (expr, env, kont)
-    = (Ut.color Ut.Yellow $ show expr)
+    = (Ut.color Ut.Blue $ show expr)
     ++ " "
-    ++ (Ut.color Ut.Black $ show env)
+    ++ (Ut.color Ut.Yellow $ show env)
     ++ " "
-    ++ (Ut.color Ut.Blue $ show kont)
+    ++ (Ut.color Ut.Black $ show kont)
 
 
 data Clo = Clo Lambda Env
@@ -46,7 +46,7 @@ instance Show Env where
 
 data Kont = Done
           | EvalArg Expr Env Kont
-          | EvalApp Lambda Env Kont
+          | EvalFn Lambda Env Kont
           deriving (Show)
 
 
@@ -83,19 +83,20 @@ step ( Lam lam
      )
   = ( arg
     , env'
-    , EvalApp lam env kont
+    , EvalFn lam env kont
     )
 
 -- |Evaluated the argument? Now perform the application.
 step ( Lam lam
      , env
-     , EvalApp (name :=> expr) env' kont
+     , EvalFn (name :=> expr) env' kont
      )
   = (expr
     , env' // (name, Clo lam env)
     , kont
     )
   where
+    -- What is this? alpha renaming?
     (//) :: (Var -> Clo) -> (Var, Clo) -> (Var -> Clo)
     (//) f (envName, clo) = \name ->
       if (envName == name)

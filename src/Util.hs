@@ -1,7 +1,6 @@
 module Util
        ( module Util
        , module AN
-       , color
        ) where
 
 import           System.Console.ANSI as AN
