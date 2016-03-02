@@ -16,13 +16,15 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Tensor
-                     , Peano
-                     , Interuniversal
-                     , CartesianClosed
-                     , CEKSemantics
-                     , ElmFrp
-                     , Util
-                     , PureHandlers
+                     -- , Peano
+                     -- , Interuniversal
+                     -- , CartesianClosed
+                     -- -- , CEKSemantics
+                     -- , ElmFrp
+                     -- , Util
+                     -- , PureHandlers
+                     , Defunctionalization
+                     , CataAnaHyloPara
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , pretty-show

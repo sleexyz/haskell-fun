@@ -12,6 +12,7 @@ import           Util             as Ut
 
 type Index = Int
 type Name  = String
+type Prim = Int
 
 -- Goal: small step interpretation
 -- http://matt.might.net/articles/cek-machines/
@@ -118,7 +119,7 @@ isDone _                = False
 -- Evaluation
 
 evaluate :: Expr -> State
-evaluate expr = until isDone step (inject expr)
+evaluate = until isDone step . inject
   where
     until :: (a -> Bool) -> (a -> a) -> (a -> a)
     until p f x
