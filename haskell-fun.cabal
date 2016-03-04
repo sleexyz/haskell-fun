@@ -26,6 +26,7 @@ library
                      -- , Defunctionalization
                      , Mu
                      , Prolog
+                     , Eff
                      -- , CataAnaHyloPara
   build-depends:       base >= 4.7 && < 5
                      , containers
