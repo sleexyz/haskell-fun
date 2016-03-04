@@ -3,9 +3,10 @@ Miscellaneous explorations in haskell (math, types, etc.)
 
 
 
-- [Polymorphic constraints](./src/PolymorphicConstraints.hs)
 - [Peano numbers] (./src/Peano.hs)
-- [Cartesian Closed Categories] (./src/CCC.hs)
+- [Abstract Machines] (./src/Defunctionalization.hs)
+- **TODO**: [Polymorphic constraints](./src/PolymorphicConstraints.hs)
+- **TODO**: [Cartesian Closed Categories] (./src/CCC.hs)
 
 #### build instructions:
 1. install nix and stack
