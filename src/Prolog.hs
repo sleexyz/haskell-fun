@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE GADTSyntax #-}
+{-# LANGUAGE GADTs #-}
 
 module Prolog where
 

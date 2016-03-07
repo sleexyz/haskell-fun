@@ -24,9 +24,9 @@ library
                      -- , Util
                      -- , PureHandlers
                      -- , Defunctionalization
-                     , Mu
+                     -- , Mu
                      , Prolog
-                     , Eff
+                     , RowPoly
                      -- , CataAnaHyloPara
   build-depends:       base >= 4.7 && < 5
                      , containers
