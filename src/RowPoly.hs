@@ -2,7 +2,9 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeOperators #-}
 
 module RowPoly where
 
@@ -58,9 +60,11 @@ data Key (sym:: Symbol) where
 instance Show (Key sym) where
   show (MkKey str) = str
 
-firstName = MkKey "firstName" :: Key "firstName"
-lastName = MkKey "lastName" :: Key "lastName"
 
+-- | How do I make it so that I don't have to manually connect between universes?
+class    Reifiable (n :: Symbol) where reify :: Key n
+instance Reifiable ("firstName" :: Symbol)   where reify = MkKey ("firstName" :: String)
+instance Reifiable ("lastName" :: Symbol)    where reify = MkKey ("lastName" :: String)
 
 
 
@@ -75,8 +79,8 @@ getVal :: forall (key :: Symbol) (value :: *). Entry key value -> value
 getVal (MkEntry _ val) = val
 
 
-testEntry1 = MkEntry (MkKey "firstName" :: Key "firstName") "Sean"
-testEntry2 = MkEntry (MkKey "lastName" :: Key "lastName") "Lee"
+testEntry1 = MkEntry (reify :: Key "firstName") "Sean"
+testEntry2 = MkEntry (reify :: Key "lastName")  "Lee"
 
 -- getVal testEntry1 == "Sean"
 -- getVal testEntry2 == "Lee"
@@ -87,26 +91,40 @@ testEntry2 = MkEntry (MkKey "lastName" :: Key "lastName") "Lee"
 -- | type-level list kind are polykinded kind constructor (k -> k)
 
 
-data Record (entries :: [*] ) where
+data ClosedRecord (entries :: [*] ) where
 
   MkSingleRowRecord :: forall
               (k :: Symbol) (v :: *)
-              . Record '[Entry k v ]
+              . ClosedRecord '[Entry k v ]
 
   MkDoubleRowRecord :: forall
                (k1 :: Symbol) (v1 :: *)
                (k2 :: Symbol) (v2 :: *)
-               . Record '[Entry k1 v1, Entry k2 v2]
+               . ClosedRecord '[Entry k1 v1, Entry k2 v2]
 
 
 
 
-singlerow = MkSingleRowRecord :: Record '[  Entry "firstName" String ]
+singlerow = MkSingleRowRecord :: ClosedRecord '[  Entry "firstName" String ]
 
-doublerow = MkDoubleRowRecord :: Record '[  Entry "firstName" String
-                                         ,  Entry "lastName" String
-                                         ]
+doublerow = MkDoubleRowRecord :: ClosedRecord '[  Entry "firstName" String
+                                               ,  Entry "lastName" String
+                                               ]
 
 
--- | How do I make this extensible?
+-- | How do I make this extensible? Recursive definition?
 
+data Record (r :: [*] ) where
+  Record :: forall (k :: Symbol) (v :: *) (r :: [*])
+              . Record ((Entry k v) ': r)
+
+deriving instance Show (Record r)
+
+openRec :: forall (r :: [*]). Record (Entry "firstName" String ': r)
+openRec = Record
+
+closedRec :: forall (r :: [*]). Record (Entry "firstName " String ': '[])
+closedRec = Record
+
+
+-- F-Algebra this shit?
