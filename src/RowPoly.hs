@@ -62,9 +62,12 @@ instance Show (Key sym) where
 
 
 -- | How do I make it so that I don't have to manually connect between universes?
-class    Reifiable (n :: Symbol) where reify :: Key n
+-- | This guarantees connection between our universes
+class    Reifiable (n :: Symbol) where
+  reify :: Key n
 instance Reifiable ("firstName" :: Symbol)   where reify = MkKey ("firstName" :: String)
 instance Reifiable ("lastName" :: Symbol)    where reify = MkKey ("lastName" :: String)
+instance Reifiable ("address" :: Symbol)    where reify = MkKey ("address" :: String)
 
 
 
@@ -79,11 +82,12 @@ getVal :: forall (key :: Symbol) (value :: *). Entry key value -> value
 getVal (MkEntry _ val) = val
 
 
-testEntry1 = MkEntry (reify :: Key "firstName") "Sean"
-testEntry2 = MkEntry (reify :: Key "lastName")  "Lee"
+myFirstName = MkEntry (reify :: Key "firstName") "Sean"
+myLastName = MkEntry (reify :: Key "lastName")  "Lee"
+myAddress = MkEntry (reify :: Key "address")  "123 Foo Street"
 
--- getVal testEntry1 == "Sean"
--- getVal testEntry2 == "Lee"
+-- getVal myFirstName == "Sean"
+-- getVal myLastName == "Lee"
 
 
 -- | What the fuck, entries is kind list of types!
@@ -91,40 +95,77 @@ testEntry2 = MkEntry (reify :: Key "lastName")  "Lee"
 -- | type-level list kind are polykinded kind constructor (k -> k)
 
 
-data ClosedRecord (entries :: [*] ) where
+-- data ClosedRecord (entries :: [*] ) where
 
-  MkSingleRowRecord :: forall
-              (k :: Symbol) (v :: *)
-              . ClosedRecord '[Entry k v ]
+--   MkSingleRowRecord :: forall
+--               (k :: Symbol) (v :: *)
+--               . ClosedRecord '[Entry k v ]
 
-  MkDoubleRowRecord :: forall
-               (k1 :: Symbol) (v1 :: *)
-               (k2 :: Symbol) (v2 :: *)
-               . ClosedRecord '[Entry k1 v1, Entry k2 v2]
-
-
+--   MkDoubleRowRecord :: forall
+--                (k1 :: Symbol) (v1 :: *)
+--                (k2 :: Symbol) (v2 :: *)
+--                . ClosedRecord '[Entry k1 v1, Entry k2 v2]
 
 
-singlerow = MkSingleRowRecord :: ClosedRecord '[  Entry "firstName" String ]
 
-doublerow = MkDoubleRowRecord :: ClosedRecord '[  Entry "firstName" String
-                                               ,  Entry "lastName" String
-                                               ]
+
+-- singlerow = MkSingleRowRecord :: ClosedRecord '[  Entry "firstName" String ]
+
+-- doublerow = MkDoubleRowRecord :: ClosedRecord '[  Entry "firstName" String
+--                                                ,  Entry "lastName" String
+--                                                ]
 
 
 -- | How do I make this extensible? Recursive definition?
 
 data Record (r :: [*] ) where
-  Record :: forall (k :: Symbol) (v :: *) (r :: [*])
-              . Record ((Entry k v) ': r)
+  RAppend :: (Show v) => Entry k v -> Record r -> Record ((Entry k v) ': r)
+  RClosed :: Record ('[])
+  ROpen :: Record r -- ugh, can't do anything with this one...
+
+
+
+-- type family  (r2 ~  r1) => e <:> r1 where
+
+infixr 5 <+>
+(<+>) :: (Show v) => Entry k v -> Record r -> Record ((Entry k v) ': r)
+(<+>) = RAppend
+
 
 deriving instance Show (Record r)
 
-openRec :: forall (r :: [*]). Record (Entry "firstName" String ': r)
-openRec = Record
+openRec1 :: forall (r :: [*]). Record (Entry "firstName" String ': r)
+openRec1 = myFirstName <+> ROpen
 
-closedRec :: forall (r :: [*]). Record (Entry "firstName " String ': '[])
-closedRec = Record
+closedRec1 :: Record (Entry "firstName" String ': '[])
+closedRec1 = myFirstName <+> RClosed
 
 
--- F-Algebra this shit?
+-- We can embed more entries!
+
+openRec2 :: forall (r :: [*]). Record (  Entry "firstName" String
+                                      ': Entry "lastName" String
+                                      ': r
+                                     )
+openRec2 = myFirstName <+> myLastName <+> ROpen
+
+
+-- | Now for the ultimate test? is our Record row polymorphic??
+
+hello :: forall (r :: [*]). Record (Entry "firstName" String ': r) -> String
+hello (RAppend (MkEntry _ v) _) = "hello " ++ v ++ "!"
+
+helloOpen1 :: String
+helloOpen1 = hello openRec1
+
+helloOpen2 :: String
+helloOpen2 = hello openRec2
+
+-- | Yes! Row polymorphic! (for head of the row, at least)
+-- | But somehow we need to figure out how to match parts other than the head
+
+-- | Also, is our row commutative?
+
+-- | How the fuck do I pattern match on types?
+-- | With type equality?
+
