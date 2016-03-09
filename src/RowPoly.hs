@@ -5,167 +5,75 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module RowPoly where
 
 import GHC.TypeLits
 import Data.Proxy
+import Data.Type.Equality
+
+-- | Arrgh how do I project the elements?
+
+-- data List a = Nil | Cons a (List a)
+-- type Row = List (*)
 
 
--- | Normal record:
--- data NormalPerson = NormalPerson { firstName :: String
---                                  , lastName :: String
---                                  }
+type family Find (a :: *) (r :: [*]) where
+  Find a '[] = 'False
+  Find a (a ': r) = 'True
+  Find a (b ': r1) = Find a r1
 
--- | That desugars to:
-data NormalPerson' where
-  NormalPerson' :: String -> String -> NormalPerson'
+data Record (r :: [*])  where
+  Nil    :: Record '[]
 
-firstName' :: NormalPerson' -> String
-firstName' (NormalPerson' str _) = str
+  Add    :: forall (r :: [*]) (a :: *).
+            (Find a r ~ 'False, Show a) =>
+            a -> Record r -> Record (a ': r)
 
-lastName' :: NormalPerson' -> String
-lastName' (NormalPerson' _ str) = str
-
-
-
--- | now for the row polymorphism!
--- | but first, datakinds
-
-data MonoKindedProxy (r :: [Symbol])  :: *
-  where
-    Singleton :: MonoKindedProxy r
-
-example1 = Singleton :: MonoKindedProxy '["hello", "world"]
-example2 = Singleton :: MonoKindedProxy '["goodbye", "world"]
-
-
-
--- | Data.Proxy is equivalent to Proxy, except Data.Proxy is polykinded
--- | Aka generic on Kinds
--- | So we'll use Data.Proxy from now on
-
--- Existential types!
--- We hide key via a Proxy, and then an existential type
--- data Key :: *
---   where
---     Key :: forall (key :: Symbol). Proxy key -> Key
-
-
--- lol dependent hack
-data Key (sym:: Symbol) where
-  MkKey :: String -> Key sym
-
-
-instance Show (Key sym) where
-  show (MkKey str) = str
-
-
--- | How do I make it so that I don't have to manually connect between universes?
--- | This guarantees connection between our universes
-class    Reifiable (n :: Symbol) where
-  reify :: Key n
-instance Reifiable ("firstName" :: Symbol)   where reify = MkKey ("firstName" :: String)
-instance Reifiable ("lastName" :: Symbol)    where reify = MkKey ("lastName" :: String)
-instance Reifiable ("address" :: Symbol)    where reify = MkKey ("address" :: String)
-
-
-
-data Entry (key :: Symbol) (value :: *) :: *
-  where
-    MkEntry :: Key key -> value -> Entry key value
-
-instance (Show value) => Show (Entry key value) where
-  show (MkEntry key val) = show key ++ ": "++  show val
-
-getVal :: forall (key :: Symbol) (value :: *). Entry key value -> value
-getVal (MkEntry _ val) = val
-
-
-myFirstName = MkEntry (reify :: Key "firstName") "Sean"
-myLastName = MkEntry (reify :: Key "lastName")  "Lee"
-myAddress = MkEntry (reify :: Key "address")  "123 Foo Street"
-
--- getVal myFirstName == "Sean"
--- getVal myLastName == "Lee"
-
-
--- | What the fuck, entries is kind list of types!
--- | value-level list type are polytypic type constructor (* -> *)
--- | type-level list kind are polykinded kind constructor (k -> k)
-
-
--- data ClosedRecord (entries :: [*] ) where
-
---   MkSingleRowRecord :: forall
---               (k :: Symbol) (v :: *)
---               . ClosedRecord '[Entry k v ]
-
---   MkDoubleRowRecord :: forall
---                (k1 :: Symbol) (v1 :: *)
---                (k2 :: Symbol) (v2 :: *)
---                . ClosedRecord '[Entry k1 v1, Entry k2 v2]
-
-
-
-
--- singlerow = MkSingleRowRecord :: ClosedRecord '[  Entry "firstName" String ]
-
--- doublerow = MkDoubleRowRecord :: ClosedRecord '[  Entry "firstName" String
---                                                ,  Entry "lastName" String
---                                                ]
-
-
--- | How do I make this extensible? Recursive definition?
-
-data Record (r :: [*] ) where
-  RAppend :: (Show v) => Entry k v -> Record r -> Record ((Entry k v) ': r)
-  RClosed :: Record ('[])
-  ROpen :: Record r -- ugh, can't do anything with this one...
-
-
-
--- type family  (r2 ~  r1) => e <:> r1 where
-
-infixr 5 <+>
-(<+>) :: (Show v) => Entry k v -> Record r -> Record ((Entry k v) ': r)
-(<+>) = RAppend
-
+  -- Remove :: forall (r :: [*]) (a :: *).
+  --           (Find a r ~ 'False, Show a) =>
+  --           Record (a ': r) -> Record r
 
 deriving instance Show (Record r)
 
-openRec1 :: forall (r :: [*]). Record (Entry "firstName" String ': r)
-openRec1 = myFirstName <+> ROpen
+remove :: forall (r :: [*]) (a :: *).
+          (Find a r ~ 'False, Show a) =>
+          Record (a ': r) -> (a, Record r)
 
-closedRec1 :: Record (Entry "firstName" String ': '[])
-closedRec1 = myFirstName <+> RClosed
+remove (Add x record) = (x, record)
 
+select ::  forall (r :: [*]) (a :: *).
+           (Find a r ~ 'False, Show a) =>
+           Record (a ': r) -> a
 
--- We can embed more entries!
-
-openRec2 :: forall (r :: [*]). Record (  Entry "firstName" String
-                                      ': Entry "lastName" String
-                                      ': r
-                                     )
-openRec2 = myFirstName <+> myLastName <+> ROpen
+select = fst . remove
 
 
--- | Now for the ultimate test? is our Record row polymorphic??
+-- foo :: forall (r :: [*]) (a :: *) (b :: *). 
+--        (Find a r ~ 'False, Show a, Show b) =>
+--        Record (b ': r) -> a :~: b -> a
 
-hello :: forall (r :: [*]). Record (Entry "firstName" String ': r) -> String
-hello (RAppend (MkEntry _ v) _) = "hello " ++ v ++ "!"
 
-helloOpen1 :: String
-helloOpen1 = hello openRec1
+class (Find a r ~ 'True) => Has a r where
+  get :: Record r -> a
 
-helloOpen2 :: String
-helloOpen2 = hello openRec2
+-- How do I avoid OVERLAPPING?
 
--- | Yes! Row polymorphic! (for head of the row, at least)
--- | But somehow we need to figure out how to match parts other than the head
+instance {-# OVERLAPPING #-} (Show a, Find a r0 ~ 'False) => Has a (a ': r0) where
+  get = select
 
--- | Also, is our row commutative?
+instance {-# OVERLAPPING #-} (Show b, Find b r0 ~ 'False, Find a (b ': r0) ~ 'True, (a == b) ~ 'False, Has a r0) => Has a (b ': r0) where
+  get = get . snd . remove
 
--- | How the fuck do I pattern match on types?
--- | With type equality?
 
+
+test :: Record '[String, Bool]
+test = Add "hello" $ Add True Nil
+
+-- > get test :: String
+-- "hello"
+
+-- > get test :: Bool
+-- True
