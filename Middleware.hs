@@ -1,7 +1,8 @@
-module PureHandlers where
+module Middleware where
 
 
--- yay or nay?
+-- | Middleware in Haskell!
+-- | It's all revealed in the types!
 
 data Message = Msg Int Int
               deriving (Show, Eq, Ord)

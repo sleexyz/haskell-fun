@@ -5,14 +5,14 @@ let
   inherit (nixpkgs) pkgs;
 
   f = { mkDerivation, ansi-terminal, base, containers, pretty-show
-      , stdenv
+      , stdenv, unicode-prelude
       }:
       mkDerivation {
         pname = "haskell-fun";
         version = "0.1.0.0";
         src = ./.;
         libraryHaskellDepends = [
-          ansi-terminal base containers pretty-show
+          ansi-terminal base containers pretty-show unicode-prelude
         ];
         testHaskellDepends = [ base ];
         homepage = "http://github.com/sleexyz/haskell-fun#readme";

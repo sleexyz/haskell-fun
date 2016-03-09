@@ -3,7 +3,7 @@
 {-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
-module CEKSemantics where
+module SmallSteps where
 
 import           Prelude          hiding (until)
 import qualified Text.Show.Pretty as Pr
