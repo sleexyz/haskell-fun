@@ -19,6 +19,7 @@ import GHC.TypeLits
 import GHC.Prim
 import Data.Proxy
 import Data.Type.Equality
+import Data.Type.Bool
 
 
 
@@ -27,12 +28,19 @@ type family Find (a :: *) (row :: [*]) where
   Find a (a ': row) = 'True
   Find a (b ': row) = Find a row
 
+-- | Looser equality (up to membership)
+-- | O(n^2 comparison)
+
+type family Same (rowA :: [*]) (rowB :: [*]) :: Bool where
+  Same '[] '[] = 'True
+  Same (a ': rowA) rowB = Find a rowB && Same rowA rowB
 
 -- | Idempotent remove
 type family Remove (a :: *) (row :: [*]) where
   Remove a '[] = '[]
   Remove a (a ': row) = row
   Remove a (b ': row) = b ': Remove a row
+
 
 
 
@@ -77,11 +85,15 @@ remove (Add x record) = (x, record)
 class (Find a row ~ 'True) => Has a row where
   get    :: Record row -> a
 
-  -- I need to prove that row is equal to row_
-  delete :: ( Find a row_ ~ 'False
-            , Remove a row ~ row_
+  -- I need to prove that row is *minimally* destructive.
+  -- i.e. that I get back everything.
+  -- I guess delete is impossible.
+
+  delete :: ( Find a newrow ~ 'False
+            , Same (Remove a row) newrow ~ 'True
+            , Remove a row ~ newrow
             )
-            => Proxy a -> Record row -> Record row_
+            => Proxy a -> Record row -> Record newrow
 
 
 instance {-# OVERLAPPING #-} ( Show a
@@ -101,13 +113,19 @@ instance {-# OVERLAPPING #-} ( Show b
                              , Find b row ~ 'False
                              , Find a (b ': row) ~ 'True
                              , (a == b) ~ 'False
+                             , Remove a row ~ newrow
                              , Has a row
                              )
                              => Has a (b ': row) where
+
+  get :: Record (b ': row) -> a
   get = get . snd . remove
-  delete p r = Add head . delete p $ rest
-    where
-      (head, rest) = remove r
+
+  delete :: Proxy a -> Record (b ': row) -> Record (b ': Remove a row)
+  -- delete p r = Add head . delete p $ rest
+  --   where
+  --     (head, rest) = remove r
+   -- :: (Find)Record row -> Record newrow)
 
 
 
@@ -116,12 +134,12 @@ test :: Record '[Bool, String]
 test = Add True $ Add "hello" Nil
 
 
-deleteBool :: ( Find Bool row_ ~ 'False
-              , Remove Bool row ~ row_
-              , Has Bool row
-              )
-              => Record row -> Record row_
-deleteBool = delete (Proxy :: Proxy Bool)
+-- deleteBool :: ( Find Bool row_ ~ 'False
+--               , Remove Bool row ~ row_
+--               , Has Bool row
+--               )
+--               => Record row -> Record row_
+-- deleteBool = delete (Proxy :: Proxy Bool)
 
 -- > get test :: String
 -- "hello"
