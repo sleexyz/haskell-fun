@@ -11,6 +11,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module RowPoly where
 
@@ -50,7 +51,12 @@ data Record (row :: [*])  where
 
   -- Uncover :: ∀ (row :: [*]) (a :: *) (row_ :: [*]). ( row ~ (a ': row_)
   --                                                   )
-  --           => Record row -> Record (a ': row)
+  --           => Record row -> Record (a ': row_)
+
+  -- ReallyRemove :: ∀ (row :: [*]) (a :: *) (row_ :: [*]). ( Find a (Remove a row) ~ 'False
+  --                                                        , row_ ~ Remove a row
+  --                                                        )
+  --                 => Record (Remove a row) -> Record row_
 
 -- I need a hide and show!
 
@@ -61,6 +67,7 @@ deriving instance Show (Record row)
 -- | Returns (head entry, rest of record)
 remove :: ∀ (row :: [*]) (a :: *). ( Show a
                                    , Find a row ~ 'False
+                                   -- , row ~ Remove a (a ': row)
                                    )
           => Record (a ': row) -> (a, Record row)
 
@@ -70,6 +77,7 @@ remove (Add x record) = (x, record)
 class (Find a row ~ 'True) => Has a row where
   get    :: Record row -> a
 
+  -- I need to prove that row is equal to row_
   delete :: ( Find a row_ ~ 'False
             , Remove a row ~ row_
             )
@@ -97,7 +105,9 @@ instance {-# OVERLAPPING #-} ( Show b
                              )
                              => Has a (b ': row) where
   get = get . snd . remove
-  delete = undefined
+  delete p r = Add head . delete p $ rest
+    where
+      (head, rest) = remove r
 
 
 
