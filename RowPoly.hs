@@ -13,6 +13,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+-- {-# LANGUAGE ImpredicativeTypes #-}
 
 module RowPoly where
 
@@ -38,32 +39,30 @@ type family Remove (a :: *) (row :: [*]) where
 
 
 
+infixr 5 :+
 
+data Set (row :: [*])  where
+  Nil    :: Set '[]
 
-data Record (row :: [*])  where
-  Nil    :: Record '[]
-
-  Add    :: ∀ (row :: [*]) (a :: *). ( Show a
+  (:+)   :: ∀ (row :: [*]) (a :: *). ( Show a
                                      , Find a row ~ 'False
                                      )
-            => a -> Record row -> Record (a ': row)
-
-
-deriving instance Show (Record row)
+            => a -> Set row -> Set (a ': row)
+deriving instance Show (Set row)
 
 
 
--- | Returns (head entry, rest of record)
+-- | Returns (head entry, rest of set)
 remove :: ∀ (row :: [*]) (a :: *). ( Show a
                                    , Find a row ~ 'False
                                    )
-          => Record (a ': row) -> (a, Record row)
+          => Set (a ': row) -> (a, Set row)
 
-remove (Add x record) = (x, record)
+remove (x :+ set ) = (x, set)
 
 
 class (Find a row ~ 'True) => Has a row where
-  get    :: Record row -> a
+  get    :: Set row -> a
 
   -- I need to prove that row is *minimally* destructive.
   -- i.e. that I get back everything.
@@ -71,55 +70,106 @@ class (Find a row ~ 'True) => Has a row where
   delete :: ( Find a newrow ~ 'False
             , Remove a row ~ newrow
             )
-            => Proxy a -> Record row -> Record newrow
+            => Proxy a -> Set row -> Set newrow
+
+  set :: a -> Set row -> Set row
 
 
+-- | When a is equal to the top of our row:
 instance {-# OVERLAPPING #-} ( Show a
                              , Find a row ~ 'False
                              )
                              => Has a (a ': row) where
 
-  get :: Record (a ': row) -> a
+  get :: Set (a ': row) -> a
   get = fst . remove
 
-  delete :: Proxy a -> Record (a ': row) -> Record row
+  delete :: Proxy a -> Set (a ': row) -> Set row
   delete _ = snd . remove
 
-  -- I need a proof that my types are equal, and then safe cast!
+  set :: a -> Set (a ':row) -> Set (a ': row)
+  set x (_ :+ rest)= x :+ rest
 
+
+-- | When a is not equal to the top of our row:
 instance {-# OVERLAPPING #-} ( Show b
-                             -- , (a == b) ~ 'False
-                             , Find a (b ': row) ~ 'True
-                             , Find b row ~ 'False
-                             , Find a row ~ 'True
+                             , Find a (b ': row)     ~ 'True
+                             , Find b row            ~ 'False
                              , Find a (Remove a row) ~ 'False
                              , Find b (Remove a row) ~ 'False
-                             , (b ': Remove a row) ~ newrow
-                             , (b ': Remove a row) ~ Remove a (b ': row)
+                             , (b ': Remove a row)   ~ Remove a (b ': row)
                              , Has a row
                              )
                              => Has a (b ': row) where
 
-  get :: Record (b ': row) -> a
+  get :: Set (b ': row) -> a
   get = get . snd . remove
 
-  delete :: Proxy a -> Record (b ': row) -> Record (Remove a (b ':row))
+  delete :: Proxy a -> Set (b ': row) -> Set (Remove a (b ':row))
 
-  delete p r = Add a. delete p $ rest
+  delete p r = (:+) a. delete p $ rest
     where
       (a, rest) = remove r
 
+  set :: a -> Set (b ': row) -> Set (b ': row)
+  set x (y :+ rest)= y :+ set x rest
+
+
+data (sym :: Symbol) --> a = Proxy sym :-> a
+                           deriving (Show)
+
+extract :: (sym --> a) -> a
+extract (_ :-> x) = x
+
+
+-- Test
+
+testA :: Set '[ "firstName" --> String
+              , "lastName" --> String
+              , "age" --> Int
+              ]
+
+testA = ((Proxy :: Proxy "firstName") :-> "Sean")
+  :+    ((Proxy :: Proxy "lastName") :-> "Lee")
+  :+    ((Proxy :: Proxy "age") :-> 19)
+  :+    Nil
+
+
+testB :: Set '[ "lastName" --> String
+              , "firstName" --> String
+              , "age" --> Int
+              ]
+testB = ((Proxy :: Proxy "lastName") :-> "Wadler")
+  :+    ((Proxy :: Proxy "firstName") :-> "Philip")
+  :+    ((Proxy :: Proxy "age") :-> 59)
+  :+    Nil
 
 
 
-testA :: Record '[Bool, String]
-testA = Add True $ Add "hello" Nil
+changeName :: (Has ("firstName" --> String) row) => Set row -> Set row
+changeName = set ((Proxy :: Proxy "firstName") :-> "Snoop")
 
-testB :: Record '[String, Bool]
-testB = Add "hello" $ Add True Nil
+greet :: ( Has ("firstName" --> String) row
+         , Has ("lastName" --> String) row
+         ) => Set row -> String
+greet s = "Hello "
+  ++ extract (get s :: "firstName" --> String)
+  ++ " "
+  ++ extract (get s :: "lastName" --> String)
 
--- > get test :: String
--- "hello"
+bounce :: (Has ("age" --> Int) row) => Set row -> String
+bounce s = f $ extract (get s :: "age" --> Int)
+  where
+    f x
+      | x < 21 = "Get out of here!"
+      | otherwise = "Come on in."
 
--- > get test :: Bool
--- True
+main :: IO ()
+main = do
+  print testA
+  print (get testA :: "firstName" --> String)
+  print (get testA :: "lastName" --> String)
+  print (delete (Proxy :: Proxy ("lastName" --> String)) testA)
+  print (delete (Proxy :: Proxy ("lastName" --> String)) testA)
+
+-- TODO: record nesting? How do we do that?
