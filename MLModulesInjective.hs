@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ConstrainedClassMethods #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 
@@ -11,7 +11,7 @@ module MLModules where
 -- If they are injective, then we can have them in negative position with type-family dependencies. 
 
 class MLMonoid m where
-  type T m
+  type T m = r | r -> m
 
   zero :: T m
   (<>) :: T m -> T m -> T m
@@ -22,8 +22,8 @@ data AddMon = AddMon
 instance MLMonoid AddMon where
   type T AddMon = Int
 
-  getZero _ = 0
-  getAppend _ = (+) 
+  zero = 0
+  (<>) = (+) 
 
 foo :: Int
 foo = zero <> zero

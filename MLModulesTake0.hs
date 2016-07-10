@@ -1,8 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving#-}
--- {-# LANGUAGE InjectiveTypeFamilies #-}
 
 module MLModules where
 
