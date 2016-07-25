@@ -25,4 +25,4 @@ test3 = (1 :: Int) === (1 + 0 :: Int)     -- true
 test4 = "hello" === 1                     -- false
 test5 = [] === []                         -- false!!!
 test6 = ([] :: [Int]) === ([] :: [Int])   -- true
-test7 = ([] :: [Float]) === ([] :: [Int]) -- true
+test7 = ([] :: [Float]) === ([] :: [Int]) -- false
