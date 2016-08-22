@@ -1,9 +1,12 @@
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Yoneda2 where
 
@@ -96,3 +99,5 @@ instance Comonad Yoneda where
     = x
       & f
       & pure
+
+
