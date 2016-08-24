@@ -9,6 +9,9 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DeriveFunctor #-}
 
+-- Transliteration of
+-- https://www.cs.cmu.edu/~rjsimmon/15312-s14/hws/hw1update2-handout.pdf
+
 module ABT where
 
 -- UTIL
