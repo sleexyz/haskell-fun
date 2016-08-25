@@ -1,3 +1,3 @@
-# Haskell sketches
-Miscellaneous Haskell sketches
+# fun with haskell
 
+haskell is fun
