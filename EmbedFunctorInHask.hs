@@ -14,15 +14,16 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- contravariant functors...
 
 import GHC.Types
 import Prelude hiding (Functor, fmap)
 import Data.Proxy
 
--- This we carry around 
-data Embed f = Embed {unEmbed :: forall a. f a -> f a }
 
+-- Hask as Set?
+
+
+data Embed f = Embed {unEmbed :: forall a. f a -> f a }
 
 type family App k (f :: k) a where
   App (Type) (Embed f) a = f a
@@ -39,16 +40,25 @@ instance Functor (Type) (Embed Maybe) where
   _fmap _ _ f Nothing = Nothing
   _fmap _ _ f (Just x) = Just (f x)
 
+instance Functor (Type) (Embed ((->) a)) where
+  _fmap _ _ = (.)
 
-fmap :: forall (f :: Type -> Type) a b. (Functor (Type -> Type) f) => (a -> b) -> f a -> f b
+
+fmap :: forall (f :: Type -> Type) a b.
+        (Functor (Type -> Type) f) =>
+        (a -> b) -> f a -> f b
+
+-- | Your favorite fmap
 fmap = _fmap (Proxy @(Type -> Type)) (Proxy @f)
 
-fmap' = _fmap (Proxy @Type)
+fmapMaybe  = _fmap (Proxy @Type) (Proxy @(Embed Maybe))
 
-foo = fmap' (Proxy :: Proxy (Embed Maybe)) (+1) Nothing
+fmapReader :: (a -> b) -> (t -> a) -> t -> b
+fmapReader = _fmap (Proxy @Type) (Proxy @(Embed ((->) _))) 
 
---class Contravariant f where
---  cfmap :: (a -> b) -> f b -> f a
+
+-- class Contravariant k f where
+--   contramap :: (a -> b) -> f b -> f a
 
 
 --instance Functor ((->) t) where

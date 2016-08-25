@@ -80,16 +80,16 @@ class (Operator o, Variable v, Functor (View t), Eq t) =>
 
 -- implementation:
 
-data Var = Var String Int
+data VAR = VAR String Int
 
-instance Eq Var where
-  (Var _ i) == (Var _ j) = i == j
+instance Eq VAR where
+  (VAR _ i) == (VAR _ j) = i == j
 
-instance Ord Var where
-  (Var _ i) <= (Var _ j) = i <= j
+instance Ord VAR where
+  (VAR _ i) <= (VAR _ j) = i <= j
 
-instance Show Var where
-  show (Var s i) = s ++ "@" ++ show i
+instance Show VAR where
+  show (VAR s i) = s ++ "@" ++ show i
 
 instance Variable (String, Int) where
   type S (String, Int) = Int
@@ -101,7 +101,7 @@ instance Variable (String, Int) where
 
 
 data View t a where
-  Tick :: (Abt o v t) => v -> View t a
+  V :: (Abt o v t) => v -> View t a
   (:\) :: (Abt o v t) => v -> a ->  View t a
   (:$) :: (Abt o v t) => o -> [a] ->  View t a
 
@@ -128,5 +128,8 @@ instance ( Operator o
          , Variable v
          )
          => Abt o v (ABT o v) where
-  into = undefined
+  into v = case v of
+    V v     -> FV v
+    v :\ x  -> undefined
+    o :$ xs -> undefined
   out = undefined
