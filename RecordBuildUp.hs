@@ -106,7 +106,7 @@ fooExample = fooC
   & _c 3
   & mkFoo
 
--- The following doesn't typecheck:
+-- The following doesn't typecheck (as expected):
 
 -- fooExample' :: Foo
 -- fooExample' = def
@@ -154,7 +154,7 @@ fooStateExample =
     imodify (_b 2)
     imodify (_c 3)
 
--- The following doesn't type check:
+-- The following doesn't type check (as expected):
 
 -- fooStateExample' :: Foo
 -- fooStateExample' =
