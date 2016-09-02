@@ -6,10 +6,38 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE RebindableSyntax #-}
 
 import Data.Function
 
 import GHC.TypeLits
+import Data.Type.Bool
+import Control.Monad.Indexed.State
+import Control.Monad.Indexed
+import Prelude hiding ((>>), (>>=), return)
+
+
+-- Type level utils
+
+type family (l :: [Symbol]) :< (r :: [Symbol]) where
+  (l ': ls) :< r = Elem l r && (ls :< r)
+  ('[]) :< r = True
+
+type family Elem (k :: Symbol) (l :: [Symbol]) where
+  Elem k '[] = False
+  Elem k (k ':_) = True
+  Elem k (j ':xs) = Elem k xs
+
+
+type family (l :: [Symbol]) <> (r :: [Symbol]) where
+  -- (l ': ls) <> r = ls <> If (Elem l r) (r) (l ': r)
+  (l ': ls) <> r = ls <> (l ': r)
+  '[] <> r =  r
+
+
+
 
 
 -- Foo Constructor
@@ -36,18 +64,8 @@ data Foo = Foo !Int !Int !Int
 class Fooable a where
   mkFoo :: a -> Foo
 
-instance FooComplete k => Fooable (FooC k) where
+instance (["a", "b", "c"] :< k ~ True) => Fooable (FooC k) where
   mkFoo FooC{..} = Foo a b c
-
-class FooComplete (k :: [Symbol])
-instance FooComplete ["a", "b", "c"]
-instance FooComplete ["a", "c", "b"]
-instance FooComplete ["b", "a", "c"]
-instance FooComplete ["b", "c", "a"]
-instance FooComplete ["c", "b", "a"]
-instance FooComplete ["c", "a", "b"]
-
-
 
 
 
@@ -74,9 +92,17 @@ fooExample = def
   & mkFoo
 
 
--- Can we make a state monad that builds up a value?
+-- if you really want a state monad, you can use the Indexed State Monad
 
--- data StateC (c :: [Symbol] -> *) a = StateC (forall k1 k2. c k1 -> (c k2, a))
+return = ireturn
+(>>=) = (>>>=)
+a >> b = a >>= (\_ -> b)
 
--- fooState :: StateC FooC ()
--- fooState = StateC (\FooC{..} -> (FooC a b c, ()))
+runConstruct :: forall (k :: [ Symbol ]) a. Fooable (FooC k) => IxState (FooC '[ ]) (FooC k) a -> Foo
+runConstruct x = mkFoo . snd $ runIxState x def
+
+fooStateExample :: Foo
+fooStateExample = runConstruct $ do
+  imodify (_a 1)
+  imodify (_b 2)
+  imodify (_c 3)
