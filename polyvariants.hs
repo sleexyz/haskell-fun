@@ -13,32 +13,36 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE LambdaCase #-}
 
 import GHC.Types
 import Data.Proxy
 
 data V (l :: [Type]) where
-  ConsH :: V l -> V (b:l)
-  Tail :: V l
-  Cons :: a -> V l -> V (a:l)
+  Pass :: V l -> V (b:l)
+  Any :: V l
+  Put :: a -> V l -> V (a:l)
 
 
-class Puttable l a where
+class CanPut l a where
   put :: a -> V l
-instance Puttable (a:l) a where
-  put x = Cons x Tail
-instance {-# INCOHERENT #-} (Puttable l a) => Puttable (b:l) a where
-  put x = ConsH (put x)
+instance CanPut (a:l) a where
+  put x = Put x Any
+instance {-# INCOHERENT #-} (CanPut l a) => CanPut (b:l) a where
+  put x = Pass (put x)
 
-class Gettable l a where
+class Has l a where
   get :: Proxy a -> V l -> Maybe a
 
-instance Gettable (a:xs) a where
-  get _ (Cons x _) = Just x
+instance Has (a:xs) a where
+  get _ (Put x _) = Just x
   get _ _  = Nothing
 
-instance {-# INCOHERENT #-} (Gettable xs a) => Gettable (b:xs) a where
-  get p (ConsH x)  = get p x
+instance {-# INCOHERENT #-} (Has xs a) => Has (b:xs) a where
+  get p (Pass x)  = get p x
   get _ _ = Nothing
 
 foo1 :: V '[String]
@@ -50,6 +54,27 @@ foo2 = put "hello"
 foo3 :: V '[Int, String]
 foo3 = put "hello"
 
+foo4 :: V '[Int, String]
+foo4 = put (1 :: Int)
 
-getString :: (Gettable l String) => V l -> String
-getString (get (Proxy @String) -> Just x) = x
+
+type family (xs :: [Type]) :< (ys :: [Type]) :: Constraint where
+  '[] :< ys = ()
+  (x:xs) :< ys = (Has ys x, xs :< ys)
+
+
+pattern Is x <- (get (Proxy :: Proxy a) -> Just x)
+
+
+
+
+
+getString :: '[String, Int] :< l => V l -> String
+getString = \case
+  Is (x :: Int) -> show x
+  Is (x :: String) -> x
+  _ -> "error"
+
+
+-- data (s :: Symbol) ~> 
+-- pattern Is' x <- (get (Proxy :: Proxy a) -> Just (x))
