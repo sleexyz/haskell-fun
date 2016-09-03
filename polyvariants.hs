@@ -17,52 +17,37 @@
 import GHC.Types
 import Data.Proxy
 
-
--- | Non-empty list
-
-infixr 5 :+
-data Nel a = Head a | a :+ (Nel a)
-
-
-data V (l :: Nel Type) where
-  ConsH :: V l -> V (b :+ l)
+data V (l :: [Type]) where
+  ConsH :: V l -> V (b:l)
   Tail :: V l
-
-  In :: a -> V (Head a)
-  Cons :: a -> V l -> V (a :+ l)
+  Cons :: a -> V l -> V (a:l)
 
 
 class Puttable l a where
   put :: a -> V l
-
-instance Puttable (Head a) a where
-  put x = In x
-instance Puttable (a :+ l) a where
+instance Puttable (a:l) a where
   put x = Cons x Tail
-instance {-# INCOHERENT #-} (Puttable l a) => Puttable (b :+ l) a where
+instance {-# INCOHERENT #-} (Puttable l a) => Puttable (b:l) a where
   put x = ConsH (put x)
 
 class Gettable l a where
   get :: Proxy a -> V l -> Maybe a
 
-instance Gettable (Head a) a where
-  get _ (In x) = Just x
-  get _ _ = Nothing
-instance Gettable (a :+ xs) a where
+instance Gettable (a:xs) a where
   get _ (Cons x _) = Just x
   get _ _  = Nothing
 
-instance {-# INCOHERENT #-} (Gettable xs a) => Gettable (b :+ xs) a where
+instance {-# INCOHERENT #-} (Gettable xs a) => Gettable (b:xs) a where
   get p (ConsH x)  = get p x
   get _ _ = Nothing
 
-foo1 :: V (Head String)
+foo1 :: V '[String]
 foo1 = put "hello"
 
-foo2 :: V (String :+ Head Int)
+foo2 :: V '[String, Int]
 foo2 = put "hello"
 
-foo3 :: V (Int :+ Head String)
+foo3 :: V '[Int, String]
 foo3 = put "hello"
 
 
