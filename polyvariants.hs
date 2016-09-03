@@ -12,6 +12,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 import GHC.Types
 import Data.Proxy
@@ -42,14 +43,18 @@ instance {-# INCOHERENT #-} (Puttable l a) => Puttable (b :+ l) a where
   put x = ConsH (put x)
 
 class Gettable l a where
-  get :: Proxy a -> V l -> a
+  get :: Proxy a -> V l -> Maybe a
 
 instance Gettable (Head a) a where
-  get _ (In x) = x
+  get _ (In x) = Just x
+  get _ _ = Nothing
 instance Gettable (a :+ xs) a where
-  get _ (Cons x _) = x
+  get _ (Cons x _) = Just x
+  get _ _  = Nothing
+
 instance {-# INCOHERENT #-} (Gettable xs a) => Gettable (b :+ xs) a where
   get p (ConsH x)  = get p x
+  get _ _ = Nothing
 
 foo1 :: V (Head String)
 foo1 = put "hello"
@@ -57,8 +62,9 @@ foo1 = put "hello"
 foo2 :: V (String :+ Head Int)
 foo2 = put "hello"
 
-foo3 :: V (Int :+ Int :+ Head String)
+foo3 :: V (Int :+ Head String)
 foo3 = put "hello"
 
+
 getString :: (Gettable l String) => V l -> String
-getString = get Proxy
+getString (get (Proxy @String) -> Just x) = x
