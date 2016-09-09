@@ -19,8 +19,8 @@ type family (a :: N) + (b :: N)  where
   Z + b = b
   (S a) + b = S (a + b)
 
-type family Sym (k :: Type) (eq :: Equal k a b) :: (Equal k b a) where
-  Sym k (Refl :: Equal k a a) = Refl
+-- type family Sym (k :: Type) (eq :: Equal k a b) :: (Equal k b a) where
+--   Sym k (Refl :: Equal k a a) = Refl
 
 -- type family Cong (k :: Type) (s :: Type) (f :: k -> s) (a :: k) (b :: k)
 --   (eq :: Equal k a b) :: Equal s (f a) (f b)
@@ -34,5 +34,15 @@ type family ZeroZero :: (Equal N (Z + Z) Z) where
 
 
 type family ZeroPlus (a :: N) :: (Equal N (Z + a) a) where
-  ZeroPlus Z = Refl
-  ZeroPlus (S n) = Refl
+  ZeroPlus  n = Refl
+
+
+type family PlusZero (a :: N) :: (Equal N (a + Z) a) where
+  PlusZero n = Refl
+
+
+
+data Hello k (a :: k) = H
+  deriving (Show)
+
+h = H :: Hello (Hello (Hello (Hello k a) H) H) H

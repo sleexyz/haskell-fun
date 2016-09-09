@@ -17,6 +17,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 
 import GHC.Types
@@ -24,11 +25,10 @@ import GHC.TypeLits
 import Data.Proxy
 
 
-data Sum (l :: [k]) where
+data Sum (l :: [Type]) where
   Pass :: Sum l -> Sum (b:l)
   Any :: Sum l
   Put :: a -> Sum l -> Sum (a:l)
-
 
 
 class CanPut l a where
@@ -64,7 +64,7 @@ foo4 :: Sum '[Int, String]
 foo4 = put (1 :: Int)
 
 
-type family (xs :: [k]) :< (ys :: [k]) :: Constraint where
+type family (xs :: [Type]) :< (ys :: [Type]) :: Constraint where
   '[] :< ys = ()
   (x:xs) :< ys = (Has ys x, xs :< ys)
 
@@ -91,9 +91,21 @@ instance (KnownSymbol s, Show t) => Show (s ~> t) where
 --               , "blue" ~> String
 --               ]
 
-colors :: Sum (("red" ~> String):k)
-colors = put (Field @"red" "hello")
 
--- colorstoString = case colors of
---   Is (Field x :: "red" ~> String) -> x
-  -- Is (Field x :: "blue" ~> String) -> x
+type RGBField = "rgb" ~> (Int, Int, Int)
+type RGBAField = "rgba" ~> (Int, Int, Int, Int)
+type Colors = Sum [RGBField, RGBAField]
+
+
+-- Input type cannot be inferred.
+-- I wish I could have defaulting rules with type parameters
+
+red :: Colors
+red = put (Field @ "rgb" (1 :: Int, 0 :: Int, 0 :: Int))
+
+
+-- Output types can be inferred!
+
+colorsToString = case red of
+  Is (Field x :: RGBField) -> show x
+  Is (Field x :: RGBAField) -> show x
