@@ -10,6 +10,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | typesafe printf in haskell
 --
@@ -115,10 +116,10 @@ printf p = genCurry (printf' p)
 
 
 cool :: String
-cool  = printf (Proxy :: Proxy '["cool mayn"])
+cool  = printf $ Proxy @'["cool mayn"]
 
 greet :: String -> String
-greet = printf (Proxy :: Proxy '["hello ", "%s", "!"])
+greet = printf $ Proxy @'["hello ", "%s", "!"]
 
 tellAge :: String -> Int -> String
-tellAge = printf (Proxy :: Proxy '["%s", " is ", "%i", " years old."])
+tellAge = printf $ Proxy @'["%s", " is ", "%i", " years old."]
