@@ -1,5 +1,8 @@
 {-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveFunctor#-}
 
 
 import Control.Monad
@@ -31,17 +34,18 @@ type App = Request → IO Response
 type Middleware = App -> App
 
 handleGreeting ∷ Middleware
-handleGreeting _ "hello" = pure "How are you?"
-handleGreeting _ "hi" = pure "Hello!"
-handleGreeting f x = f x
+handleGreeting fallback  = \case
+  "hello" -> pure "How are you?"
+  "hi" -> pure "Hello!"
+  x -> fallback x
 
 handleQuestion ∷ Middleware
-handleQuestion _ "How are you?" = pure "swell."
-handleQuestion _ "What is your name?" = pure "Asdf"
-handleQuestion f x = f x
+handleQuestion fallback = \case
+  "How are you?" -> pure "swell."
+  "What is your name?" -> pure "Asdf"
+  x -> fallback x
 
 makeApp :: [Middleware] -> App -> App
--- makeApp = appEndo . mconcat . (fmap Endo)
 makeApp = ala Endo foldMap
 
 
@@ -51,22 +55,48 @@ myApp = makeApp [handleGreeting, handleQuestion] _404
     _404 = const (pure "404 Not Found")
 
 
+newtype Codensity m a = Codensity { runCodensity :: forall b. (a -> m b) -> m b }
 
--- IO Response → Codensity IO Response
+instance Functor (Codensity k) where
+  fmap f (Codensity m) = Codensity (\k -> m (k . f))
 
--- type App = Request → IO Response
+instance Applicative (Codensity f) where
+  pure x = Codensity (\k -> k x)
+  Codensity f <*> Codensity g = Codensity (\bfr -> f (\ab -> g (bfr . ab)))
 
--- IO Response = IO Response
+instance Monad (Codensity f) where
+  return = pure
+  m >>= k = Codensity (\c -> runCodensity m (\a -> runCodensity (k a) c))
 
--- IO Response = ∀b. (Response -> IO b) -> IO b
+type Response' = Codensity IO Response
 
--- yoneda:
--- f a = ∀b. (a → b) → f b
--- IO Response = ∀b. (Response → b) → IO Response
-
--- type App' = Request → (∀b. (Response → b) → IO b)
-
+type App' = Request → Response'
+type Middleware' = App' -> App'
 
 
--- -- This is what WAI should be:
--- type Application = ∀a. Request -> (∀b. Response → IO b) → a
+liftCodensity :: Monad m => m a -> Codensity m a
+liftCodensity x = Codensity (x >>=)
+
+lowerCodensity :: Applicative m => Codensity m a -> m a
+lowerCodensity x = runCodensity x pure
+
+app2app' :: App ->  App'
+app2app' f r = liftCodensity (f r)
+
+app'2app :: App' ->  App
+app'2app f r = lowerCodensity (f r)
+
+mid2mid' :: Middleware -> Middleware'
+mid2mid' m a = app2app' (m (app'2app a))
+
+makeApp' :: [Middleware'] -> App' -> App'
+makeApp' = ala Endo foldMap
+
+
+handleGreeting' ∷ Middleware'
+handleGreeting' f = \case
+  "hello" -> Codensity $ \respond -> do
+    respond "Hi!"
+    -- putStrLn "cleaning up..."
+  "hi" -> pure "How are you?"
+  x -> f x
