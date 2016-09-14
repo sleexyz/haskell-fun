@@ -62,7 +62,7 @@ instance (KnownSymbol str, Parseable as) => Parseable (Const str ': as) where
   printf'' _ x = symbolVal (Proxy :: Proxy str)
                ++ printf'' (Proxy :: Proxy as) x
 
-instance {-# INCOHERENT #-}(Parseable as) => Parseable (Var String ': as) where
+instance {-# OVERLAPS #-} (Parseable as) => Parseable (Var String ': as) where
   type Needs (Var String ': as) = (String ': (Needs as))
   printf'' _ (x :+ xs) = x
                        ++ printf'' (Proxy :: Proxy as) xs
@@ -110,16 +110,16 @@ instance (Curryable as o) => Curryable (a ': as) o where
 
 
 -- | Type-safe printf in Haskell!
-printf :: forall l. (Parseable (Tokenize l), Curryable (Needs (Tokenize l)) String) => Proxy l -> Curried (Needs (Tokenize l)) String
-printf p = genCurry (printf' p)
+printf :: forall l. (Parseable (Tokenize l), Curryable (Needs (Tokenize l)) String) => Curried (Needs (Tokenize l)) String
+printf = genCurry (printf' (Proxy @l))
 
 
 
 cool :: String
-cool  = printf $ Proxy @'["cool mayn"]
+cool  = printf @'["cool mayn"]
 
 greet :: String -> String
-greet = printf $ Proxy @'["hello ", "%s", "!"]
+greet = printf @'["hello ", "%s", "!"]
 
 tellAge :: String -> Int -> String
-tellAge = printf $ Proxy @'["%s", " is ", "%i", " years old."]
+tellAge = printf @'["%s", " is ", "%i", " years old."]
