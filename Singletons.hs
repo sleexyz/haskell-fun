@@ -21,7 +21,8 @@ import Data.Proxy
 import Test.Hspec
 
 
-type family Demote (k :: Type)
+-- | Demote should be injective
+type family Demote (k :: Type) = r | r -> k
 
 type family TypeOf (a :: k) where TypeOf (a :: k) = k
 reify :: forall a. Reflect a => Demote (TypeOf a)
