@@ -56,20 +56,30 @@ data V (i :: Nat)  = V
 
 data Valence k = [k] :. k
 
-data ABT k (fv :: [k]) (sort :: k) where
-  Prim :: (Lang k) => Primitive k sort -> ABT k fv sort
-  Op :: (Lang k) => Operator k i o -> Vec ((Foo k fv) <$> i) -> ABT k fv o
-  Var :: (Lang k, n TypeLits.<= Length fv) => V n -> ABT k fv (fv !! n)
+-- fixme: rename to u
+data ABT
+  k
+  (primitive :: k -> *)
+  (operator :: [Valence k] -> k -> *)
+  (fv :: [k])
+  (sort :: k) where
+  Prim ::
+    primitive sort ->
+    ABT k primitive operator fv sort
+  Op ::
+    operator i o ->
+    Vec (Foo k primitive operator fv <$> i) ->
+    ABT k primitive operator fv o
+  Var :: (n TypeLits.<= Length fv) =>
+    V n ->
+    ABT k primitive operator fv (fv !! n)
 
-data Foo k (fv :: [k]) :: Valence k ~> * -> *
-type instance Foo k fv $ (v :. o) = ABT k (v ++ fv) o
+data Foo k primitive operator (fv :: [k]) :: Valence k ~> * -> *
+type instance Foo k primitive operator fv $ (v :. o) = ABT k primitive operator (v ++ fv) o
 
-class Lang k where
-  type Primitive k = (r :: k -> *) | r -> k
-  type Operator k = (r :: [Valence k] -> k -> *) | r -> k
 
 -- * Example
-data Arith = Number
+data ArithU = Number
 
 data ArithV a where
   NumberV :: Int -> ArithV Number
@@ -78,9 +88,7 @@ data ArithOp i o where
   Plus :: ArithOp '[ '[] :. Number,  '[] :. Number] Number
   Let :: ArithOp '[ '[] :. Number, '[Number] :. Number] Number
 
-instance Lang Arith where
-  type Primitive Arith = ArithV
-  type Operator Arith = ArithOp
+type Arith = ABT ArithU ArithV ArithOp
 
 -- * Spec
 
@@ -88,13 +96,13 @@ spec :: Spec
 spec = do
   describe "ASTs" $ do
     let
-      x :: ABT Arith '[] Number
+      x :: Arith '[] Number
       x = Op Plus $ Prim (NumberV 4) :+ Prim (NumberV 2) :+ Nil
 
-      y :: ABT Arith '[Number] Number
+      y :: Arith '[Number] Number
       y = Var (V @0)
 
-      z :: ABT Arith '[] Number
+      z :: Arith '[] Number
       z = Op Let $ Prim (NumberV 2) :+ Var (V @0) :+ Nil
 
     it "works" $ do
