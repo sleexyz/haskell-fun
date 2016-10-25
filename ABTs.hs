@@ -11,14 +11,14 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | Dependently-typed type-safe ABTs
--- See PFPL, Chapter 1
+-- | Typed ABTs
+-- Implemented via type-level DeBrujin indices
 -- Defunctionalization idea taken from Vinyl
 module ASTs where
 
 import Test.Hspec
 import GHC.Types
-import qualified GHC.TypeLits as TypeLits
+import qualified GHC.TypeLits as TypeLits -- fixme: unqualify
 
 -- * Some dependent type stuff:
 
@@ -34,7 +34,7 @@ type family (f :: (k ~> l) -> *) <$> (xs :: [k]) :: [l] where
 -- | HList
 data Vec :: [*] -> * where
   Nil :: Vec '[]
-  (:+) :: x -> Vec xs -> Vec (x ': xs)
+  (:+) :: !x -> !(Vec xs) -> Vec (x ': xs)
 infixr 6 :+
 
 type family (xs :: [k]) ++ (ys :: [k]) :: [k] where
@@ -45,6 +45,11 @@ type family (xs :: [k]) ++ (ys :: [k]) :: [k] where
 type family xs !! n where
   (x ': xs) !! 0 = x
   (_ ': xs) !! x = xs !! (x TypeLits.- 1)
+  '[] !! x = TypeLits.TypeError (TypeLits.Text "Invalid index.")
+
+type family Length (xs :: [k]) where
+  Length '[] = 0
+  Length (x ': xs) = 1 TypeLits.+ Length xs
 
 
 data V (i :: Nat)  = V
@@ -54,9 +59,7 @@ data Valence k = [k] :. k
 data ABT k (fv :: [k]) (sort :: k) where
   Prim :: (Lang k) => Primitive k sort -> ABT k fv sort
   Op :: (Lang k) => Operator k i o -> Vec ((Foo k fv) <$> i) -> ABT k fv o
-
-  -- fixme : implement constrant on n and fv
-  Var :: (Lang k) => V n -> ABT k fv (fv !! n)
+  Var :: (Lang k, n TypeLits.<= Length fv) => V n -> ABT k fv (fv !! n)
 
 data Foo k (fv :: [k]) :: Valence k ~> * -> *
 type instance Foo k fv $ (v :. o) = ABT k (v ++ fv) o
@@ -65,10 +68,12 @@ class Lang k where
   type Primitive k = (r :: k -> *) | r -> k
   type Operator k = (r :: [Valence k] -> k -> *) | r -> k
 
--- | A set of sorts
+-- * Example
 data Arith = Number
+
 data ArithV a where
   NumberV :: Int -> ArithV Number
+
 data ArithOp i o where
   Plus :: ArithOp '[ '[] :. Number,  '[] :. Number] Number
   Let :: ArithOp '[ '[] :. Number, '[Number] :. Number] Number
@@ -77,18 +82,22 @@ instance Lang Arith where
   type Primitive Arith = ArithV
   type Operator Arith = ArithOp
 
-
-
--- infixr 1 :\
-
+-- * Spec
 
 spec :: Spec
 spec = do
   describe "ASTs" $ do
     let
       x :: ABT Arith '[] Number
-      x = Op Plus (Prim (NumberV 2) :+ Prim (NumberV 3) :+ Nil)
-      -- x = Op Let (NumberV 1) (Op Plus ((V @0) :+ Prim (NumberV 2) :+ Nil))
+      x = Op Plus $ Prim (NumberV 4) :+ Prim (NumberV 2) :+ Nil
+
+      y :: ABT Arith '[Number] Number
+      y = Var (V @0)
+
+      z :: ABT Arith '[] Number
+      z = Op Let $ Prim (NumberV 2) :+ Var (V @0) :+ Nil
 
     it "works" $ do
       1 `shouldBe` 1
+
+-- | fixme: write tests for substitution
