@@ -56,51 +56,41 @@ data V (i :: Nat)  = V
 
 data Valence k = [k] :. k
 
--- fixme: rename to u
-data ABT
-  k
-  (primitive :: k -> *)
-  (operator :: [Valence k] -> k -> *)
-  (fv :: [k])
-  (sort :: k) where
-  Prim ::
-    primitive sort ->
-    ABT k primitive operator fv sort
-  Op ::
-    operator i o ->
-    Vec (Foo k primitive operator fv <$> i) ->
-    ABT k primitive operator fv o
-  Var :: (n TypeLits.<= Length fv) =>
-    V n ->
-    ABT k primitive operator fv (fv !! n)
+data ABT u :: (u -> *) -> ([Valence u] -> u -> *) -> [u] -> u -> * where
+  Prim :: val sort -> ABT u val op fv sort
+  Op :: op i o -> Vec (Foo u val op fv <$> i) -> ABT u val op fv o
+  Var :: (n TypeLits.<= Length fv) => V n -> ABT u val op fv (fv !! n)
 
+-- fixme: rename
 data Foo k primitive operator (fv :: [k]) :: Valence k ~> * -> *
-type instance Foo k primitive operator fv $ (v :. o) = ABT k primitive operator (v ++ fv) o
+type instance Foo k primitive operator fv $ (bv :. o) =
+  ABT k primitive operator (bv ++ fv) o
 
 
 -- * Example
+
 data ArithU = Number
 
-data ArithV a where
-  NumberV :: Int -> ArithV Number
+data ArithVal :: ArithU -> * where
+  NumberV :: Int -> ArithVal Number
 
-data ArithOp i o where
+data ArithOp :: [Valence ArithU] -> ArithU -> * where
   Plus :: ArithOp '[ '[] :. Number,  '[] :. Number] Number
   Let :: ArithOp '[ '[] :. Number, '[Number] :. Number] Number
 
-type Arith = ABT ArithU ArithV ArithOp
+type Arith = ABT ArithU ArithVal ArithOp
 
 -- * Spec
 
 spec :: Spec
 spec = do
-  describe "ASTs" $ do
+  describe "ABTs" $ do
     let
       x :: Arith '[] Number
-      x = Op Plus $ Prim (NumberV 4) :+ Prim (NumberV 2) :+ Nil
+      x = Prim (NumberV 4)
 
-      y :: Arith '[Number] Number
-      y = Var (V @0)
+      y :: Arith '[] Number
+      y = Op Plus $ Prim (NumberV 4) :+ Prim (NumberV 2) :+ Nil
 
       z :: Arith '[] Number
       z = Op Let $ Prim (NumberV 2) :+ Var (V @0) :+ Nil
