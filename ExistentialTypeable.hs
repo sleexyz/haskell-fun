@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-module ExistentialInstance where
+module ExistentialTypeable where
 
 import Data.Maybe
 import Data.Typeable
