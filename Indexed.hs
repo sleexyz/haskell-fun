@@ -12,6 +12,9 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
+
+module Indexed (UseMonad(..), UseIxMonad(..)) where
+
 import Data.Function
 
 import Control.Monad.Indexed.State
@@ -20,9 +23,7 @@ import Control.Monad.Indexed
 import Control.Monad.IO.Class
 import Prelude hiding ((>>), (>>=), return)
 import qualified Prelude as P
-
-class Default a where
-  def :: a
+import Data.Default
 
 data UseMonad m =
   UseMonad { return :: forall a. a -> m a
