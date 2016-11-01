@@ -14,6 +14,9 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Subtyping where
 
@@ -35,44 +38,34 @@ import GHC.Types
 -- v2tov1 :: Vec2 <: Vec1
 -- v2tov1 = Wrap $ \Vec2{..} -> Vec1{..}
 
--- | Type-level function wrapper (TyFun)
-data (~>) :: * -> * -> *
-type family ($) (f :: (k ~> l) -> *) (a :: k) :: l
+type family Π (a :: k) = (r :: *) | r -> k
 
--- | Either define your poset manually
-
-data Subtype :: (k -> *) -> (k -> k -> Constraint) -> * where
-  WrapCoerce :: (forall a b. (sub a b) => el a -> el b) -> Subtype el sub
-
-unwrapCoerce ::
-  Subtype el sub ->
-  (forall a b. (sub a b) => el a -> el b)
-unwrapCoerce (WrapCoerce x) = x
+class (a :: k) <: (b :: k) where
+  coerce :: Π a -> Π b
 
 
 data Thing = Object | Animal | Pig | Pants
-
 data Thing' :: Thing -> * where
   Object' :: Thing' Object
   Animal' :: Thing' Animal
   Pig' :: String -> Thing' Pig
   Pants' :: Thing' Pants
-
-class SubThing (a :: Thing) (b :: Thing) where
-  coerceThing :: Thing' a -> Thing' b
-
-instance SubThing a a where
-  coerceThing x = x
-
-instance SubThing a Object where
-  coerceThing _ = Object'
-
-instance SubThing Pig Animal where
-  coerceThing (Pig' st) = Animal'
+deriving instance (Show (Thing' t))
+type instance Π (a :: Thing) = Thing' a
 
 
-asdf :: Thing' Pig
-asdf = coerceThing $ Pig' "wilbur"
+instance a <: a where
+  coerce x = x
 
-spec = it "" $ do
-  shouldBe 1 1
+instance a <: Object where
+  coerce _ = Object'
+
+instance Pig <: Animal where
+  coerce (Pig' st) = Animal'
+
+
+spec = it "coerces properly" $ do
+  let wilbur = Pig' "wilbur"
+      wilburAsAnimal = coerce @Thing @Pig @Animal wilbur
+  show wilbur `shouldBe` "Pig' \"wilbur\""
+  show wilburAsAnimal `shouldBe` "Animal'"
