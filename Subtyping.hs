@@ -58,17 +58,23 @@ instance KnownCoerce (HList xs) (HList '[]) where
 instance (KnownCoerce y x, KnownCoerce (HList ys) (HList xs)) => KnownCoerce (HList (y : ys)) (HList (x : xs)) where
   coerce (y :+ xs) = (coerce y) :+ (coerce xs)
 
+-- fixme: implement type level sets
+
 spec = do
   describe "pigs and objects" $ do
     it "coerces pigs and objects properly" $ do
-      (coerce Pig) `shouldBe` Pig
-      (coerce Pig) `shouldBe` Object
+      coerce Pig `shouldBe` Pig
+      coerce Pig `shouldBe` Object
 
   describe "HList" $ do
     it "coerces HList properly" $ do
-      (coerce Nil :: HList '[])       `shouldBe` Nil
-      (coerce (Pig :+ Nil))           `shouldBe` Nil
-      (coerce (Pig :+ Nil))           `shouldBe` Pig :+ Nil
-      (coerce (Pig :+ Nil))           `shouldBe` Object :+ Nil
-      (coerce (Object :+ Pig :+ Nil)) `shouldBe` (Object :+ Pig :+ Nil)
-      (coerce (Pig :+ Pig :+ Nil))    `shouldBe` (Object :+ Pig :+ Nil)
+      coerce Nil                    `shouldBe` Nil
+      coerce (Pig :+ Nil)           `shouldBe` Pig :+ Nil
+      coerce (Pig :+ Nil)           `shouldBe` Object :+ Nil
+      coerce (Object :+ Pig :+ Nil) `shouldBe` Object :+ Pig :+ Nil
+      coerce (Pig :+ Pig :+ Nil)    `shouldBe` Object :+ Pig :+ Nil
+
+    it "even when lengths are off" $ do
+      coerce (Pig :+ Nil)           `shouldBe` Nil
+      coerce (Pig :+ Pig :+ Nil)    `shouldBe` Nil
+      coerce (Pig :+ Pig :+ Nil)    `shouldBe` Object :+ Nil
