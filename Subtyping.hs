@@ -1,92 +1,74 @@
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module Subtyping where
 
 import Test.Hspec
 import GHC.Types
-import Data.Type.Bool
 
-type family Π = (r :: k -> *) | r -> k
+-- * Plumbing
 
-class KnownCoerce (a :: k) (b :: k) where
-  coerce :: Π a -> Π b
+type family Map (f :: j -> k) (list :: [j]) where
+  Map _ '[] = '[]
+  Map f (x : xs) = f x ': Map f xs
+
+type family ConcatConstraints (cs ::[Constraint]) :: Constraint where
+  ConcatConstraints '[] = ()
+  ConcatConstraints (x ': xs) = (x, ConcatConstraints xs)
+
+-- * Focus:
+
+class KnownCoerce a b where
+  coerce :: a -> b
+
+instance {-# INCOHERENT #-} KnownCoerce a a where
+  coerce = id
 
 -- * We can write our subtyping relation manually:
 
--- | Specify a universe of types:
-data Thing = Object | Pig
-
--- | Define an interpretation
-data SThing :: Thing -> * where
-  SObject :: SThing Object
-  SPig :: SThing Pig
-deriving instance (Show (SThing a))
-deriving instance (Eq (SThing a))
-type instance Π = SThing
-
-instance KnownCoerce (a :: Thing) (a :: Thing) where
-  coerce = id
+data Object = Object
+  deriving (Show, Eq)
+data Pig = Pig
+  deriving (Show, Eq)
 
 instance KnownCoerce Pig Object where
-  coerce SPig = SObject
+  coerce Pig = Object
 
 -- * Or we can derive our subtyping relation from the structure of our type:
 
-data SList :: [k] -> * where
-  SNil :: SList '[]
-  SCons :: (Show (Π a), Eq (Π a)) => Π a -> SList xs -> SList (a ': xs)
+data HList :: [*] -> * where
+  Nil :: HList '[]
+  (:+) :: a -> HList as -> HList (a ': as)
+deriving instance (ConcatConstraints (Map Show as)) => Show (HList as)
+deriving instance (ConcatConstraints (Map Eq as)) => Eq (HList as)
 
-deriving instance Show (SList a)
-deriving instance Eq (SList a)
+infixr 6 :+
 
-type instance Π = SList
+instance KnownCoerce (HList xs) (HList '[]) where
+  coerce _ = Nil
 
-type family x ∈ ys where
-  x ∈ '[] = False
-  x ∈ (x ': ys) = True
-  x ∈ (y ': ys) = x ∈ ys
-
-instance KnownCoerce ys '[] where
-  coerce _ = SNil
-
-instance (Eq (Π x), Show (Π x), KnownCoerce y x, KnownCoerce ys xs) => KnownCoerce (y : ys) (x : xs) where
-  coerce (SCons y xs) = SCons (coerce y) (coerce xs)
+instance (KnownCoerce y x, KnownCoerce (HList ys) (HList xs)) => KnownCoerce (HList (y : ys)) (HList (x : xs)) where
+  coerce (y :+ xs) = (coerce y) :+ (coerce xs)
 
 spec = do
-  describe "Thing" $ do
-    it "coerces Thing properly" $ do
-      let wilbur :: Π Pig
-          wilbur = SPig
+  describe "pigs and objects" $ do
+    it "coerces pigs and objects properly" $ do
+      (coerce Pig) `shouldBe` Pig
+      (coerce Pig) `shouldBe` Object
 
-          wilburAsObject :: Π Object
-          wilburAsObject = coerce wilbur
-
-      show wilbur `shouldBe` "SPig"
-      show wilburAsObject `shouldBe` "SObject"
-
-  describe "List" $ do
-    it "coerces List properly" $ do
-      (coerce SNil :: Π '[]) `shouldBe` SNil
-      (coerce (SCons SPig SNil) :: Π ('[] :: [Thing])) `shouldBe` SNil
-      (coerce (SCons SPig SNil) :: Π '[Pig]) `shouldBe` (SCons SPig SNil)
-      (coerce (SCons SPig SNil) :: Π '[Object]) `shouldBe` (SCons SObject SNil)
-      (coerce ((SCons SObject (SCons SPig SNil))) :: Π '[Object, Pig]) `shouldBe` (SCons SObject  (SCons SPig SNil))
-      (coerce ((SCons SPig (SCons SPig SNil))) :: Π '[Object, Pig]) `shouldBe` (SCons SObject  (SCons SPig SNil))
+  describe "HList" $ do
+    it "coerces HList properly" $ do
+      (coerce Nil :: HList '[])       `shouldBe` Nil
+      (coerce (Pig :+ Nil))           `shouldBe` Nil
+      (coerce (Pig :+ Nil))           `shouldBe` Pig :+ Nil
+      (coerce (Pig :+ Nil))           `shouldBe` Object :+ Nil
+      (coerce (Object :+ Pig :+ Nil)) `shouldBe` (Object :+ Pig :+ Nil)
+      (coerce (Pig :+ Pig :+ Nil))    `shouldBe` (Object :+ Pig :+ Nil)
