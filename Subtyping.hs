@@ -41,12 +41,12 @@ type family ($) (f :: (k ~> l) -> *) (a :: k) :: l
 
 -- | Either define your poset manually
 
-data Subtype :: (k -> *) -> (k -> k -> *) -> (k -> k -> Constraint) -> * where
-  WrapCoerce :: (forall a b. (knownsub a b) => (sub a b) -> el a -> el b) -> Subtype el sub knownsub
+data Subtype :: (k -> *) -> (k -> k -> Constraint) -> * where
+  WrapCoerce :: (forall a b. (sub a b) => el a -> el b) -> Subtype el sub
 
 unwrapCoerce ::
-  Subtype el sub knownsub ->
-  (forall a b. (knownsub a b) => (sub a b) -> el a -> el b)
+  Subtype el sub ->
+  (forall a b. (sub a b) => el a -> el b)
 unwrapCoerce (WrapCoerce x) = x
 
 
@@ -55,25 +55,24 @@ data Thing = Object | Animal | Pig | Pants
 data Thing' :: Thing -> * where
   Object' :: Thing' Object
   Animal' :: Thing' Animal
-  Pig' :: Thing' Pig
+  Pig' :: String -> Thing' Pig
   Pants' :: Thing' Pants
 
-data SubThing :: Thing -> Thing -> * where
-  ThingId :: forall a. SubThing a a
-  ThingCompose :: forall a b c. SubThing b c -> SubThing a b -> SubThing a c
+class SubThing (a :: Thing) (b :: Thing) where
+  coerceThing :: Thing' a -> Thing' b
 
-class KnownSubThing (a :: Thing) (b :: Thing) where
-  coerceThing :: SubThing a b -> Thing' a -> Thing' b
+instance SubThing a a where
+  coerceThing x = x
 
-instance KnownSubThing Pig Pig where
-  coerceThing _ Pig' = Pig'
+instance SubThing a Object where
+  coerceThing _ = Object'
 
-subthings :: Subtype Thing' SubThing KnownSubThing
-subthings = WrapCoerce coerceThing
+instance SubThing Pig Animal where
+  coerceThing (Pig' st) = Animal'
 
 
-asdf = (unwrapCoerce subthings) ThingId Pig'
+asdf :: Thing' Pig
+asdf = coerceThing $ Pig' "wilbur"
 
 spec = it "" $ do
-  x <- return $ subthings
   shouldBe 1 1
