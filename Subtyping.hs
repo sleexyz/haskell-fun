@@ -14,58 +14,79 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Subtyping where
 
 import Test.Hspec
 import GHC.Types
+import Data.Type.Bool
 
--- data a <: b = Wrap {unwrap :: a -> b}
+type family Π = (r :: k -> *) | r -> k
 
--- data Vec1 = Vec1 { x :: Int }
--- data Vec2 = Vec2 { x :: Int, y :: Int }
--- data Vec3 = Vec3 { x :: Int, y :: Int, z :: Int }
-
--- v3tov2 :: Vec3 <: Vec2
--- v3tov2 = Wrap $ \Vec3{..} -> Vec2{..}
-
--- v3tov1 :: Vec3 <: Vec1
--- v3tov1 = Wrap $ \Vec3{..} -> Vec1{..}
-
--- v2tov1 :: Vec2 <: Vec1
--- v2tov1 = Wrap $ \Vec2{..} -> Vec1{..}
-
-type family Π (a :: k) = (r :: *) | r -> k
-
-class (a :: k) <: (b :: k) where
+class KnownCoerce (a :: k) (b :: k) where
   coerce :: Π a -> Π b
 
+-- * We can write our subtyping relation manually:
 
-data Thing = Object | Animal | Pig | Pants
-data Thing' :: Thing -> * where
-  Object' :: Thing' Object
-  Animal' :: Thing' Animal
-  Pig' :: String -> Thing' Pig
-  Pants' :: Thing' Pants
-deriving instance (Show (Thing' t))
-type instance Π (a :: Thing) = Thing' a
+-- | Specify a universe of types:
+data Thing = Object | Pig
 
+-- | Define an interpretation
+data SThing :: Thing -> * where
+  SObject :: SThing Object
+  SPig :: SThing Pig
+deriving instance (Show (SThing a))
+deriving instance (Eq (SThing a))
+type instance Π = SThing
 
-instance a <: a where
-  coerce x = x
+instance KnownCoerce (a :: Thing) (a :: Thing) where
+  coerce = id
 
-instance a <: Object where
-  coerce _ = Object'
+instance KnownCoerce Pig Object where
+  coerce SPig = SObject
 
-instance Pig <: Animal where
-  coerce (Pig' st) = Animal'
+-- * Or we can derive our subtyping relation from the structure of our type:
 
+data SList :: [k] -> * where
+  SNil :: SList '[]
+  SCons :: (Show (Π a), Eq (Π a)) => Π a -> SList xs -> SList (a ': xs)
 
-spec = it "coerces properly" $ do
-  let wilbur = Pig' "wilbur"
-      wilburAsAnimal = coerce @Thing @Pig @Animal wilbur
-  show wilbur `shouldBe` "Pig' \"wilbur\""
-  show wilburAsAnimal `shouldBe` "Animal'"
+deriving instance Show (SList a)
+deriving instance Eq (SList a)
+
+type instance Π = SList
+
+type family x ∈ ys where
+  x ∈ '[] = False
+  x ∈ (x ': ys) = True
+  x ∈ (y ': ys) = x ∈ ys
+
+instance KnownCoerce ys '[] where
+  coerce _ = SNil
+
+instance (Eq (Π x), Show (Π x), KnownCoerce y x, KnownCoerce ys xs) => KnownCoerce (y : ys) (x : xs) where
+  coerce (SCons y xs) = SCons (coerce y) (coerce xs)
+
+spec = do
+  describe "Thing" $ do
+    it "coerces Thing properly" $ do
+      let wilbur :: Π Pig
+          wilbur = SPig
+
+          wilburAsObject :: Π Object
+          wilburAsObject = coerce wilbur
+
+      show wilbur `shouldBe` "SPig"
+      show wilburAsObject `shouldBe` "SObject"
+
+  describe "List" $ do
+    it "coerces List properly" $ do
+      (coerce SNil :: Π '[]) `shouldBe` SNil
+      (coerce (SCons SPig SNil) :: Π ('[] :: [Thing])) `shouldBe` SNil
+      (coerce (SCons SPig SNil) :: Π '[Pig]) `shouldBe` (SCons SPig SNil)
+      (coerce (SCons SPig SNil) :: Π '[Object]) `shouldBe` (SCons SObject SNil)
+      (coerce ((SCons SObject (SCons SPig SNil))) :: Π '[Object, Pig]) `shouldBe` (SCons SObject  (SCons SPig SNil))
+      (coerce ((SCons SPig (SCons SPig SNil))) :: Π '[Object, Pig]) `shouldBe` (SCons SObject  (SCons SPig SNil))
