@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 -- | Safe State management API.
 --
@@ -29,6 +30,17 @@ type family Π = (r ∷ k → *) | r → k
 data SBool ∷ Bool → * where
   STrue ∷ SBool True
   SFalse ∷ SBool False
+deriving instance (Show (SBool b))
+
+type instance Π = SBool
+
+type family Not b where
+  Not True = False
+  Not False = True
+
+sNot ∷ SBool t → SBool (Not t)
+sNot STrue = SFalse
+sNot SFalse = STrue
 
 type DynState i j a = IxStateT IO i j a
 
@@ -36,16 +48,17 @@ lio :: IO a -> IxStateT IO i i a
 lio = ilift . liftIO
 
 main :: IO ()
-main = void $ flip runIxStateT (1 ∷ Int) $
+main = void $ flip runIxStateT STrue $
   let Use.IxMonad{..} = def in do
-    imodify (const 2)
+    imodify sNot
     lio . print =<< iget
 
-    imodify (const "hello")
+    imodify sNot
     lio . print =<< iget
 
-    imodify (const ())
+    imodify sNot
     lio . print =<< iget
+
 
 -- import Control.Monad.Trans
 -- import Data.IORef
