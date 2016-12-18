@@ -11,58 +11,115 @@
 -- | An attempt at modeling observables in Haskell.
 module Observable where
 
-import Prelude hiding (init)
+import Prelude hiding (initMutable)
 import Data.IORef
+import Control.Monad
 import Control.Monad.ST
 import Data.STRef
 import Test.Hspec
 import GHC.Types
+import qualified Data.IntMap.Strict as Map
 
 class (Monad m) => Stateful m where
-  init :: state -> m (MutableRef m state)
+  initMutable :: state -> m (MutableRef m state)
 
-data MutableRef m state = 
-  MkMutableRef (m state) (state -> m ())
+class Mutable ref where
+  get :: ref m state -> m state
+  set :: ref m state -> state -> m ()
 
-get :: MutableRef m state -> m state
-get (MkMutableRef getter _) = getter
+data MutableRef m state = MkMutableRef {
+  getter :: m state,
+  setter :: state -> m ()
+}
 
-set :: state -> MutableRef m state -> m ()
-set state (MkMutableRef _ setter) = setter state
+instance Mutable MutableRef where
+  get (MkMutableRef getter _) = getter
+  set (MkMutableRef _ setter) = setter
 
 instance Stateful IO where
-  init :: forall state. state -> IO (MutableRef IO state)
-  init s = do
+  initMutable :: forall state. state -> IO (MutableRef IO state)
+  initMutable s = do
     ref <- newIORef s
     let getter = readIORef ref
         setter = writeIORef ref
     return $ MkMutableRef getter setter
 
 instance Stateful (ST t) where
-  init :: state -> (ST t) (MutableRef (ST t) state)
-  init s = do
+  initMutable :: state -> (ST t) (MutableRef (ST t) state)
+  initMutable s = do
     ref <- newSTRef s
     let get = readSTRef ref
         set = writeSTRef ref
     return $ MkMutableRef get set
 
--- | Naive solution: 
+-- | Take 1: 
 --
 -- An observable is mutable, mutable reference, in which the setter is mutated.
 --
 -- Issues:
 --  - Cannot deregister callbacks
 --  - Unwieldy (to get value, one must (get >=> get))
-registerNaive :: 
-  forall (m :: Type -> Type) (state :: Type).
-  (Stateful m) =>  
+registerTake1 :: forall (m :: Type -> Type) (state :: Type). (Stateful m) =>  
   MutableRef m (MutableRef m state) -> 
   (state -> m ()) -> 
   m ()
-registerNaive refref cb =  do
+registerTake1 refref cb =  do
   let MkMutableRef getRef setRef = refref
   MkMutableRef oldGet oldSet <- getRef
   setRef $ MkMutableRef oldGet (\state -> oldSet state >> cb state)
+
+
+-- | Take 2: 
+--
+-- An observable is mutable reference of some state, along with some mutable reference of a collection of callbacks.
+--
+-- Issues:
+--  - Memory leaks
+data ObservableRef m state = MkObservableRef {
+  getter :: m state,
+  setter :: state -> m (),
+  registerer :: (state -> m ()) -> m (m ())
+}
+
+class Mutable ref => Observable ref where
+  register :: ref m state -> (state -> m ()) -> m (m ())
+
+makeObservable :: forall m state. Stateful m => 
+ MutableRef m state -> 
+ m (ObservableRef m state)
+makeObservable (MkMutableRef originalGetter originalSetter) = do
+    idRef <- initMutable (0 :: Int)
+    let freshId :: m Int
+        freshId = do
+          newId <- get idRef
+          set idRef (newId + 1)
+          return newId
+
+    callbacksRef <- initMutable (Map.fromList []  :: Map.IntMap (state -> m ()))
+    let newSetter :: state -> m ()
+        newSetter state = do
+          originalSetter state
+          callbacks <- get callbacksRef
+          mapM_ ($state) $ fmap snd $ Map.toList callbacks
+
+        register :: (state -> m ()) -> m (m ())
+        register cb = do
+          callbacks <- get callbacksRef
+          id <- freshId
+          set callbacksRef (Map.insert id cb callbacks)
+          let deregister = do
+                callbacks <- get callbacksRef
+                set callbacksRef (Map.delete id callbacks)
+          return deregister
+          
+    return $ MkObservableRef originalGetter newSetter register
+
+instance Mutable ObservableRef where
+  get (MkObservableRef getter _ _) = getter
+  set (MkObservableRef _ setter _) = setter
+  
+instance Observable ObservableRef where
+  register (MkObservableRef _ _ register) = register
 
 runTest  :: forall a. (Eq a, Show a) => (forall m. (Stateful m) => m a) -> a -> Spec
 runTest test expectedResult = do
@@ -77,40 +134,99 @@ runTest test expectedResult = do
 spec :: Spec
 spec = do
   describe "Stateful" $ do
-    let test :: (Stateful m) => m String
+    let test :: (Stateful m) => m Bool
         test = do
-          ref <- init "hello"
-          set "world" ref
+          ref <- initMutable False
+          set ref True
           get ref
-    let expectedResult = "world"
-    runTest test expectedResult
+    runTest test True
 
-  describe "Stateful: Pointer to pointer" $ do
-    let test :: (Monad m, Stateful m) => m String
-        test = do
-          refref <- init =<< init "hello" 
-          return refref >>= get >>= get
-    let expectedResult = "hello"
-    runTest test expectedResult
-
-  describe "registerNaive" $ do
+  describe "Observable: Take 1" $ do
     context "doesn't trigger cb when not supposed to" $ do
-      let test :: forall m. (Monad m, Stateful m) => m Bool
+      let test :: forall m. (Stateful m) => m Bool
           test = do
-            refref <- init =<< init "hello" 
-            isModifiedRef <- init False
-            registerNaive refref $ const $ set True isModifiedRef
+            refref <- initMutable =<< initMutable "hello" 
+            isModifiedRef <- initMutable False
+            registerTake1 refref $ const $ set isModifiedRef True
             get isModifiedRef
-      let expectedResult = False
-      runTest test expectedResult
+      runTest test False
 
     context "triggers cb when supposed to" $ do
-      let test :: forall m. (Monad m, Stateful m) => m Bool
+      let test :: forall m. (Stateful m) => m Bool
           test = do
-            refref <- return "hello" >>= init >>= init
-            isModifiedRef <- init False
-            registerNaive refref $ const $ set True isModifiedRef
-            return refref >>= get >>= set "asdf"
+            refref <- return "hello" 
+              >>= initMutable 
+              >>= initMutable
+            isModifiedRef <- initMutable False
+            registerTake1 refref $ const $ set isModifiedRef True
+            (get refref) >>= flip set "asdf"
             get isModifiedRef
-      let expectedResult = True
-      runTest test expectedResult
+      runTest test True
+
+  describe "Observable: Take 2" $ do
+    context "doesn't trigger cb when not supposed to" $ do
+      let test :: forall m. (Stateful m) => m Bool
+          test = do
+            ref <- return "hello"
+              >>= initMutable
+              >>= makeObservable
+            isModifiedRef <- initMutable False
+            _ <- register ref (const $ set isModifiedRef True)
+            get isModifiedRef
+      runTest test False
+
+    context "can trigger cb when supposed to" $ do
+      let test :: forall m. (Stateful m) => m Bool
+          test = do
+            ref <- return "hello"
+              >>= initMutable
+              >>= makeObservable
+            isModifiedRef <- initMutable False
+            _ <- register ref (const $ set isModifiedRef True)
+            set ref "world"
+            get isModifiedRef
+      runTest test True
+
+    context "can trigger multiple cb's when supposed to" $ do
+      let test :: forall m. (Stateful m) => m Bool
+          test = do
+            ref <- return "hello"
+              >>= initMutable
+              >>= makeObservable
+            isModifiedRef1 <- initMutable False
+            _ <- register ref (const $ set isModifiedRef1 True)
+            isModifiedRef2 <- initMutable False
+            _ <- register ref (const $ set isModifiedRef2 True)
+            set ref "world"
+            (&&) <$> get isModifiedRef1 <*> get isModifiedRef2
+      runTest test True
+
+    context "can trigger cb's multiple times" $ do
+      let test :: forall m. (Stateful m) => m Int
+          test = do
+            ref <- return ()
+              >>= initMutable
+              >>= makeObservable
+            counter <- initMutable (0 :: Int)
+            let incr = get counter >>= \i -> set counter (i + 1)
+            _ <- register ref $ const incr
+            set ref ()
+            set ref ()
+            set ref ()
+            set ref ()
+            set ref ()
+            get counter
+      runTest test 5
+
+    context "can deregister cb" $ do
+      let test :: forall m. (Stateful m) => m Bool
+          test = do
+            ref <- return "hello"
+              >>= initMutable
+              >>= makeObservable
+            isModifiedRef <- initMutable False
+            deregister <- register ref (const $ set isModifiedRef True)
+            deregister
+            set ref "world"
+            get isModifiedRef
+      runTest test False
