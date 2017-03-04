@@ -5,10 +5,17 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Free where
 
 import Data.Function
+import Test.Hspec
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import Control.Concurrent.MVar
+import Data.Maybe
 
 data Free f a where
   Pure :: a -> Free f a
@@ -43,54 +50,119 @@ instance (Functor f) => MonadFree f (Free f) where
   wrap :: f (Free f a) -> Free f a
   wrap = Wrap
 
+-- | Why "free"? Free, because its part of a free/forgetful adjunction
+--
+-- which means we need a universal property. For a fixed functor f, it needs to be
+-- the "most general" monad such that functor morphisms from f
+-- can be factored by some functor morphism from f*
+
+-- TODO: investigate the following claim:
+--
+-- A free monad is a monad where there exists functions 
+--
+-- emb :: f a -> Free f a
+--
+-- and 
+--
+-- interp :: (Monad m) => (forall a. f a -> m a) -> Free f a -> m a
+-- 
+-- such that for all monads m and functor morphisms i :: f a -> m a, interp i is the unique
+--
+-- monad morphism with the property (interp i) . emb = i
+
+
+-- Lifts a morphism from category of functors to morphism in category of monads
+-- Control.Free calls this `foldFree`
+interp :: (Functor f, Monad m) => (forall a. f a -> m a) -> Free f a -> m a
+interp i (Pure x) =  return x
+interp i (Wrap f) = i f >>= interp i
+
+-- Morphism in category of functors
+-- Control.Free calls this `liftF`
+emb :: (Functor f) => f a -> Free f a
+emb = Wrap . fmap Pure
+
+-- unfortunately, free monads have a downfall;
+-- for each branch, our `next` parameter
+-- must appear in the positive position
+-- for interp, aka foldFree, to work
+
 data Op next =
-    Exit
-  | Get Int (String -> next)
-  | Modify Int (String -> String) (String -> next)
+    Get Int (String -> next)
+  | Set Int String (String -> next)
   deriving (Functor)
 
-v1 :: Op (Op (Op next))
-v1 = Modify 0 (const "hello")
-  $ \x -> Get 1
-  $ \x -> Exit
-
-v2 :: Free Op next
-v2 = Wrap $ Modify 0 (const "hello")
-  $ \x -> Wrap $ Get 1
-  $ \x -> Wrap $ Exit
-
-v3 :: Free Op next
-v3 = do
-  x <- Wrap $ Modify 0 (const "hello") Pure
-  y <- Wrap $ Get 1 Pure
-  Wrap Exit
-
-
-liftF :: (Functor f) => f a -> Free f a
-liftF = Wrap . fmap Pure
-
-v4 :: Free Op next
-v4 = do
-  x <- liftF $ Modify 0 (const "hello") id
-  y <- liftF $ Get 1 id
-  liftF Exit
+v1 :: Op (Op String)
+v1 = Set 0 "hello"
+  $ \x -> Get 1 id
 
 class (Monad m) => OpRunner m where
   get :: Int -> m String
-  modify :: Int -> (String -> String) -> m String
-  exit :: m ()
+  set :: Int -> String -> m String
 
 instance OpRunner (Free Op) where
   get i = Wrap $ Get i Pure
-  modify i f = Wrap $ Modify i f Pure
-  exit = Wrap Exit
+  set i s = Wrap $ Set i s Pure
 
-v5 :: (OpRunner m) => m ()
-v5 = do
-  x <- modify 0 (const "hello")
-  y <- get 1
-  exit
+spec :: Spec
+spec = do
+  describe "free" $ do
+    let
+      mkRunOp :: MVar (IntMap String) -> Op a -> IO a
+      mkRunOp ref = \case
+        Get n k -> do
+          -- putStrLn $ "...getting " ++ show n
+          dict <- readMVar ref
+          return . k $ dict IntMap.! n
+        Set n v k -> do
+          -- putStrLn $ "...setting " ++ show n ++ " to " ++ v
+          modifyMVar_ ref (return . IntMap.insert n v)
+          dict <- readMVar ref
+          return . k $ dict IntMap.! n
 
+    it "works without do notation" $ do
+      let
+        example :: Free Op String
+        example = Wrap $ Set 0 "hello"
+          $ \x -> Wrap $ Get 0 Pure
 
--- hrmm... can we use generic programming to derive lifted version of these
--- functions as methods?
+      ref <- newMVar $ IntMap.fromList []
+      example & interp (mkRunOp ref)
+      test <- takeMVar ref & (fmap (fromMaybe "" . IntMap.lookup 0))
+      test `shouldBe` "hello"
+
+    it "works with do notation" $ do
+      let
+        example :: Free Op String
+        example = do
+          Wrap $ Set 0 "hello" Pure
+          Wrap $ Get 0 Pure
+
+      ref <- newMVar $ IntMap.fromList []
+      example & interp (mkRunOp ref)
+      test <- takeMVar ref & (fmap (fromMaybe "" . IntMap.lookup 0))
+      test `shouldBe` "hello"
+
+    it "works with emb" $ do
+      let
+        example :: Free Op String
+        example = do
+          x <- emb $ Set 0 "hello" id
+          emb $ Get 1 id
+
+      ref <- newMVar $ IntMap.fromList []
+      example & interp (mkRunOp ref)
+      test <- takeMVar ref & (fmap (fromMaybe "" . IntMap.lookup 0))
+      test `shouldBe` "hello"
+
+    it "works with classy Monads" $ do
+      let
+        example :: (OpRunner m) => m String
+        example = do
+          x <- set 0 "hello"
+          get 1
+
+      ref <- newMVar $ IntMap.fromList []
+      example & interp (mkRunOp ref)
+      test <- takeMVar ref & (fmap (fromMaybe "" . IntMap.lookup 0))
+      test `shouldBe` "hello"
