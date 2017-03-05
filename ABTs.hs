@@ -10,10 +10,19 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- | Typed ABTs
+-- Literal translation of PFPL, chapter 1.2
 -- Implemented via type-level DeBrujin indices
 -- Defunctionalization idea taken from Vinyl
+--
+-- This is difficult, because I'm essentially simultaneously
+-- encoding proofs on specific ABTs or ABTs in general.
+--
+-- TODO: is this related to colored operads?
+-- TODO: Try again, this time be less generic, and go for
+-- just first order substitution
 module ASTs where
 
 import Test.Hspec
@@ -51,33 +60,76 @@ type family Length (xs :: [k]) where
   Length (x ': xs) = 1 + Length xs
 
 
+-- a Nat proxy
 data V (i :: Nat)  = V
 
-data Valence k = [k] :. k
+-- Valence is a property of arguments to operator
+-- and is composed of two parts:
+--
+-- 1. a set of sorts of additional free variables
+-- 2. the output type
+data Valence u = [u] :. u
 
+-- This formulation of an ABT is parametrized on
+-- 5 parameters. Note the dependent typing.
+--
+-- (some universe of sorts)
+-- u :: Type
+--
+-- (a set of "value" types, indexed by sort)
+-- reify :: u -> Type
+--
+-- (a set of "operator" types, each indexed by a finite sequence of valences and by sort)
+-- op :: [Valence u] -> u -> Type
+--
+-- (a set of sorts of free variables)
+-- fv :: [u]
+--
+-- (the current type)
+-- sort :: u
+--
 data ABT u :: (u -> Type) -> ([Valence u] -> u -> Type) -> [u] -> u -> Type where
-  Prim :: val sort -> ABT u val op fv sort
-  Op :: op i o -> Vec (Foo u val op fv <$> i) -> ABT u val op fv o
-  Var :: (n <= Length fv) => V n -> ABT u val op fv (fv !! n)
+  Prim :: reify sort -> ABT u reify op fv sort
+  Op :: op valences sort -> Vec (CombineContexts u reify op fv <$> valences) -> ABT u reify op fv sort
+  Var :: (n <= Length fv) => V n -> ABT u reify op fv (fv !! n)
 
--- fixme: rename
-data Foo k primitive operator (fv :: [k]) :: Valence k ~> Type -> Type
-type instance Foo k primitive operator fv $ (bv :. o) =
-  ABT k primitive operator (bv ++ fv) o
+-- A type family that adds the parent binding context to the child binding context
+data CombineContexts u reify op (fv :: [k]) :: Valence k ~> Type -> Type
+type instance CombineContexts u reify op fv $ (bv :. o) = ABT u reify op (fv ++ bv) o
 
+
+-- first-order substitution
+subst ::
+     ABT u reify op fv i
+  -> ABT u reify op (i : fv) o
+  -> ABT u reify op fv o
+subst x = \case
+  Prim n -> Prim n
+  Op o v -> Op o _ -- FIXME: some recursive case
+  -- Var (n :: V 0) -> Var n -- FIXME: We can't currently pattern match at the term level
+  Var n -> _
 
 -- * Example
 
-data ArithU = Number
+data ArithSort = Number
 
-data ArithVal :: ArithU -> Type where
+data ArithVal :: ArithSort -> Type where
   NumberV :: Int -> ArithVal Number
 
-data ArithOp :: [Valence ArithU] -> ArithU -> Type where
+data ArithOp :: [Valence ArithSort] -> ArithSort -> Type where
   Plus :: ArithOp '[ '[] :. Number,  '[] :. Number] Number
   Let :: ArithOp '[ '[] :. Number, '[Number] :. Number] Number
 
-type Arith = ABT ArithU ArithVal ArithOp
+type Arith = ABT ArithSort ArithVal ArithOp
+
+plus :: Arith '[] Number -> Arith '[] Number -> Arith '[] Number
+plus x y = Op Plus $ x :+ y :+ Nil
+
+reduce :: Arith '[] Number -> Arith '[] Number
+reduce = \case
+  Prim (NumberV n) -> Prim (NumberV n)
+  Op Plus (x :+ y :+ Nil) -> Op Plus (x :+ y :+ Nil) 
+  Op Let (x :+ y :+ Nil) -> subst x y
 
 -- * Spec
 
@@ -89,12 +141,34 @@ spec = do
       x = Prim (NumberV 4)
 
       y :: Arith '[] Number
-      y = Op Plus $ Prim (NumberV 4) :+ Prim (NumberV 2) :+ Nil
+      y = Op Plus 
+        $ Prim (NumberV 4) 
+        :+ Prim (NumberV 2) 
+        :+ Nil
 
       z :: Arith '[] Number
-      z = Op Let $ Prim (NumberV 2) :+ Var (V @0) :+ Nil
+      z = Op Let 
+        $ Prim (NumberV 2) 
+        :+ Var (V @0) 
+        :+ Nil
+
+      w :: Arith '[] Number
+      w = Op Let 
+        $ Prim (NumberV 2) 
+        :+ (
+          Op Plus 
+            $ Var (V @0) 
+            :+ (
+              Op Let
+                $ Var (V @0)
+                :+ Var (V @1)
+                :+ Nil
+            )
+            :+ Nil
+        )
+        :+ Nil
 
     it "works" $ do
-      1 `shouldBe` 1
+      pending
 
 -- | fixme: write tests for substitution
