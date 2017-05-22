@@ -19,7 +19,6 @@ module TTFI where
 import Data.Functor.Const
 import Data.Monoid
 import Test.Hspec
-import Data.Proxy
 
 data Symantics (r :: * -> *) = MkSymantics {
     int :: Int -> r Int,
@@ -63,7 +62,7 @@ instance IsOptimization IsInt where
         WrapUnknown x -> x
 
 getBaseOpt :: (IsOptimization f) => forall r. Symantics r -> Symantics (f r)
-getBaseOpt sym = 
+getBaseOpt sym =
   let
     MkOptData { .. } = getOptData sym
     MkSymantics { .. } = sym
