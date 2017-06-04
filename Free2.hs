@@ -10,10 +10,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 -- * Here we demonstrate a method to generically
--- derive composite interpreters of DSL coproducts.
+-- derive composite interpreters of Free Monads of coproducts of functors,
+-- for a given target monad.
 --
--- (Outlined in Swierstra's Data types a la carte)
--- TODO: write exceptions
+-- This hinges on the fact that left adjoint functors preserve colimits.
+--
+-- TODO: encode exceptions
 module Free2 where
 
 import Control.Monad.Free
