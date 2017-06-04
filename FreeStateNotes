@@ -1,0 +1,39 @@
+-- Free Monoid
+-- Category is Hask
+-- + = (,) :: * -> * -> *
+-- a :: *
+-- 
+-- mempty :: () -> a
+-- mappend :: (a, a) -> a
+-- assoc
+-- unital
+--
+data List a = Nil | Cons a (List a)
+data List a where
+  Nil :: () -> List a
+  Cons :: a + List a -> List a
+
+instance Monoid List
+  mempty = []
+  mappend x y = x ++ y
+
+-- Free Monad
+-- Category is [Hask, Hask] (endofunctors on Hask)
+-- + = (.) :: (* -> *) -> (* -> *) -> (* -> *)
+-- f :: * -> *
+--
+-- return :: forall a. a -> f a
+-- join :: forall a. (f . f) a -> f a
+-- assoc
+-- unital
+--
+type f ~> g = forall a. f a -> g a
+Free :: (* -> *) -> (* -> *)
+data Free (f :: * -> *) a = Var a | Op (f (Free f))
+data Free f a where
+  Var :: Identity ~> Free f
+  Op :: f + (Free f)  ~> Free f
+
+data Free f a where
+  Var :: a -> Free f a
+  Op :: f (Free f a) -> Free f a
